@@ -12,7 +12,7 @@ Ad removal tool for Windows KakaoTalk
 ## Download
 
 - Before or after installation, Specify the installation directory path (default: `%appdata%\KakaoTalkAdGuard`) as an exception path in your antivirus software settings. Because this binary file is not well known, antivirus software may detect it as malware.
-- [Go to Release page to download](https://github.com/loopback-kr/KakaoTalkAdGuard/releases)
+- [Go to Release page to download](https://github.com/kndol/KakaoTalkAdGuard/releases)
 
 ## Known issues
 
@@ -23,6 +23,14 @@ Ad removal tool for Windows KakaoTalk
 ![Highlights](https://github.com/loopback-kr/KakaoTalkAdGuard/assets/28856527/493bea2b-87c9-4792-9cfd-c534aec02b14)
 
 ## Release notes
+
+### 1.0.0.12
+
+<sup>Mar. 09, 2025</sup>
+
+- Fixed an issue where the chromium browser window disappears when KakaoTalk is not running but KakaoTalkAdGuard is running
+- Fixed an issue where KakaoTalk disappeared when opening the notification window of KakaoTalk.
+- Fixed by KnDol
 
 ### 1.0.0.11
 
