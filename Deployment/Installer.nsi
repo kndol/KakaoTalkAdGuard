@@ -43,7 +43,7 @@ VIAddVersionKey "FileDescription" "${PRODUCT_FULLNAME} Setup"
 VIAddVersionKey "ProductName" "${PRODUCT_FULLNAME}"
 VIAddVersionKey "ProductVersion" "${PRODUCT_VERSION}"
 # VIAddVersionKey "LegalTrademarks" "Test Application is a trademark of Fake company"
-VIAddVersionKey "LegalCopyright" "Copyright (C) 2024 loopback.kr"
+VIAddVersionKey "LegalCopyright" "Copyright (C) 2025 loopback.kr"
 # VIAddVersionKey "OriginalFilename" "${PRODUCT_NAME} ${PRODUCT_VERSION}.exe"
 
 Function .onInit
