@@ -7,7 +7,7 @@
 !define PRODUCT_FULLNAME "KakaoTalk AdGuard"
 !define PRODUCT_NAME "KakaoTalkAdGuard"
 !define PRODUCT_COMMENTS "Ad removal tool for Windows KakaoTalk"
-!define PRODUCT_VERSION "1.0.0.11"
+!define PRODUCT_VERSION "1.0.0.12"
 !define BUILD_ARCH "x64"
 !define PRODUCT_PUBLISHER "loopback.kr"
 !define PRODUCT_REG_ROOTKEY "HKCU"
@@ -28,7 +28,7 @@
 !insertmacro MUI_UNPAGE_FINISH
 !insertmacro MUI_LANGUAGE "English"
 
-OutFile "${PRODUCT_NAME} ${PRODUCT_VERSION}.exe"
+OutFile "${PRODUCT_NAME}_${PRODUCT_VERSION}.Setup.exe"
 InstallDirRegKey HKCU "SOFTWARE\${PRODUCT_NAME}" "InstallPath"
 InstallDir "$APPDATA\${PRODUCT_NAME}"
 Name "${PRODUCT_NAME} ${PRODUCT_VERSION}"
