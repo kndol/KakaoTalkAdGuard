@@ -355,14 +355,19 @@ BOOL CALLBACK EnumChildProc(HWND hwnd, LPARAM lParam) {
 		return TRUE;
 	}
 
-	if (wcsncmp(className, L"Chrome_WidgetWin_", 17) == 0) {
-		ShowWindow(hwnd, SW_HIDE);
-		parentHandle = GetParent(parentHandle);
-		ShowWindow(parentHandle, SW_HIDE);
-		parentHandle = GetParent(parentHandle);
-		ShowWindow(parentHandle, SW_HIDE);
-		parentHandle = GetParent(parentHandle);
-		ShowWindow(parentHandle, SW_HIDE);
+	if (wcsncmp(className, L"Chrome_WidgetWin_1", 18) == 0) {
+		const WCHAR* adTitle = L"MOMENT 광고";
+		if (wcsncmp(windowText, adTitle, sizeof(adTitle)) == 0) {
+			ShowWindow(hwnd, SW_HIDE);
+			parentHandle = GetParent(parentHandle);
+			ShowWindow(parentHandle, SW_HIDE);
+			parentHandle = GetParent(parentHandle);
+			ShowWindow(parentHandle, SW_HIDE);
+			parentHandle = GetParent(parentHandle);
+			ShowWindow(parentHandle, SW_HIDE);
+			parentHandle = GetParent(parentHandle);
+			ShowWindow(parentHandle, SW_HIDE);
+		}
 		return TRUE;
 	}
 	return TRUE;
@@ -379,6 +384,8 @@ VOID CALLBACK TimerProc(HWND hwnd, UINT message, UINT idEvent, DWORD dwTimer) {
 			if (hKakaoTalkMain != NULL)
 				break;
 		}
+		if (hKakaoTalkMain == NULL)
+			break;
 
 		hAdFit = FindWindow(L"EVA_Window_Dblclk", L"");
 		if (hAdFit != NULL) {
