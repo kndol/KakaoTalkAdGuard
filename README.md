@@ -2,6 +2,8 @@
 
 Ad removal tool for Windows KakaoTalk
 
+![KnDol's GitHub stats](https://github-readme-stats.vercel.app/api?username=kndol&show_icons=true&theme=dark)
+
 ## Features
 
 - No framework libraries required
