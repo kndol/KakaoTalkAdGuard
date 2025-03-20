@@ -294,6 +294,7 @@ void ShowContextMenu(HWND hwnd, POINT pt) {
 	DestroyMenu(hMenu);
 }
 
+/*
 BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lparam) {
 	DWORD pid = 0;
 	GetWindowThreadProcessId(hwnd, &pid);
@@ -303,15 +304,19 @@ BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lparam) {
 		return TRUE; // continue
 	}
 }
+*/
 
 HWND hKakaoTalkMain;
 HWND hAdFit;
 RECT RectKakaoTalkMain;
 
+/*
 BOOL CALLBACK EnumWindowProc(HWND hwnd, LPARAM lParam) {
-	HWND parentHandle = GetParent(hwnd);
 	WCHAR className[256];
 	GetClassName(hwnd, className, 256);
+
+	WCHAR windowText[256] = L"";
+	GetWindowText(hwnd, windowText, 256);
 
 	if (wcscmp(className, L"EVA_Window_Dblclk") == 0) {
 		HWND hBannerAdChild = FindWindowEx(hwnd, NULL, L"BannerAdContainer", L"");
@@ -322,18 +327,22 @@ BOOL CALLBACK EnumWindowProc(HWND hwnd, LPARAM lParam) {
 	}	
 	return TRUE;
 }
+*/
 
-BOOL CALLBACK EnumChildProc(HWND hwnd, LPARAM lParam) {
-	HWND parentHandle = GetParent(hwnd);
+BOOL CALLBACK EnumChildProcFromMainWin(HWND hwnd, LPARAM lParam) {
 	WCHAR className[256] = L"";
 	WCHAR windowText[256] = L"";
 	GetClassName(hwnd, className, 256);
 	GetWindowText(hwnd, windowText, 256);
-	RECT Recthwnd;
 
 	if (wcscmp(className, L"EVA_ChildWindow") == 0) {
+		HWND parentHandle = GetParent(hwnd);
 		if (wcsncmp(windowText, L"OnlineMainView_", 15) == 0) { // Expand chat widget to empty space
 			SetWindowPos(hwnd, HWND_TOP, 0, 0, (RectKakaoTalkMain.right - RectKakaoTalkMain.left), (RectKakaoTalkMain.bottom - RectKakaoTalkMain.top - 32), SWP_NOMOVE);
+		}
+		else if (parentHandle == hKakaoTalkMain) { // 메인 창 광고 컨테이너 숨기기
+			ShowWindow(hwnd, SW_HIDE);
+			SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE);
 		}
 		return TRUE;
 	}
@@ -342,6 +351,7 @@ BOOL CALLBACK EnumChildProc(HWND hwnd, LPARAM lParam) {
 		if (hLockdownNumpad != NULL)
 			SetWindowPos(hwnd, HWND_TOP, 0, 0, (RectKakaoTalkMain.right - RectKakaoTalkMain.left), (RectKakaoTalkMain.bottom - RectKakaoTalkMain.top), SWP_NOMOVE);
 	}
+/*
 	if (wcscmp(className, L"BannerAdWnd") == 0) {
 		ShowWindow(hwnd, SW_HIDE);
 		return TRUE;
@@ -350,25 +360,49 @@ BOOL CALLBACK EnumChildProc(HWND hwnd, LPARAM lParam) {
 		ShowWindow(hwnd, SW_HIDE);
 		return TRUE;
 	}
-	if (wcscmp(className, L"EVA_VH_ListControl_Dblclk") == 0) {
+*/
+	if (wcscmp(className, L"EVA_VH_ListControl_Dblclk") == 0) { // 광고 제거 후 채팅 목록 다시 그리기
 		InvalidateRect(hwnd, NULL, TRUE);
 		return TRUE;
 	}
 
-	if (wcsncmp(className, L"Chrome_WidgetWin_1", 18) == 0) {
-		const WCHAR* adTitle = L"MOMENT 광고";
-		if (wcsncmp(windowText, adTitle, sizeof(adTitle)) == 0) {
-			ShowWindow(hwnd, SW_HIDE);
-			parentHandle = GetParent(parentHandle);
-			ShowWindow(parentHandle, SW_HIDE);
-			parentHandle = GetParent(parentHandle);
-			ShowWindow(parentHandle, SW_HIDE);
-			parentHandle = GetParent(parentHandle);
-			ShowWindow(parentHandle, SW_HIDE);
-			parentHandle = GetParent(parentHandle);
-			ShowWindow(parentHandle, SW_HIDE);
-		}
+	return TRUE;
+}
+
+BOOL CALLBACK HideAdWindows(HWND hwnd, LPARAM lParam) {
+	ShowWindow(hwnd, SW_HIDE);
+	SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE);
+	return TRUE;
+}
+
+BOOL CALLBACK EnumChildProcFromSubWin(HWND hwnd, LPARAM lParam) {
+	WCHAR className[256] = L"";
+	WCHAR windowText[256] = L"";
+	GetClassName(hwnd, className, 256);
+	GetWindowText(hwnd, windowText, 256);
+
+	if (wcscmp(className, L"BannerAdWnd") == 0 || wcscmp(className, L"BannerAdContainer") == 0 || wcscmp(className, L"RichPopWnd") == 0) {
+		ShowWindow(hwnd, SW_HIDE);
 		return TRUE;
+	}
+	if (wcscmp(className, L"Chrome_WidgetWin_1") == 0) {
+		if (wcscmp(windowText, L"MOMENT 광고") == 0) { // 메인 창 광고 숨기기
+			HWND parentHandle = GetParent(hwnd);
+			EnumChildWindows(hwnd, HideAdWindows, NULL);
+			ShowWindow(hwnd, SW_HIDE);
+			ShowWindow(parentHandle, SW_HIDE);
+			parentHandle = GetParent(parentHandle);
+			ShowWindow(parentHandle, SW_HIDE);
+			parentHandle = GetParent(parentHandle);
+			ShowWindow(parentHandle, SW_HIDE);
+			parentHandle = GetParent(parentHandle);
+			ShowWindow(parentHandle, SW_HIDE);
+			parentHandle = GetParent(parentHandle);
+			ShowWindow(parentHandle, SW_HIDE);
+			SetWindowPos(parentHandle, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE);
+//			return FALSE;
+		}
+//		return TRUE;
 	}
 	return TRUE;
 }
@@ -384,28 +418,29 @@ VOID CALLBACK TimerProc(HWND hwnd, UINT message, UINT idEvent, DWORD dwTimer) {
 			if (hKakaoTalkMain != NULL)
 				break;
 		}
-		if (hKakaoTalkMain == NULL)
-			break;
-
-		hAdFit = FindWindow(L"EVA_Window_Dblclk", L"");
-		if (hAdFit != NULL) {
-			EnumChildWindows(hAdFit, EnumChildProc, NULL);
+		if (hKakaoTalkMain != NULL) // 카카오톡이 실행되어 있지 않으면 진행 안 함
+		{
+			// Scan ADs recursive
+			hAdFit = FindWindow(L"EVA_Window_Dblclk", L"");
+			if (hAdFit != NULL && IsWindowVisible(hAdFit)) { // 광고 창이 보일 때만 진행
+				EnumChildWindows(hAdFit, EnumChildProcFromSubWin, NULL);
+			}
+			if (IsWindowVisible(hKakaoTalkMain)) { // 카카오톡 메인 창이 보일 때만 진행
+				GetWindowRect(hKakaoTalkMain, &RectKakaoTalkMain);
+				EnumChildWindows(hKakaoTalkMain, EnumChildProcFromMainWin, NULL);
+			}
+			//EnumWindows(EnumWindowProc, NULL);
+/*
+			// Block popup AD
+			DWORD pid_main = 0;
+			DWORD pid_popup = 0;
+			HWND hPopupWnd = FindWindow(L"RichPopWnd", L"");
+			GetWindowThreadProcessId(hKakaoTalkMain, &pid_main);
+			GetWindowThreadProcessId(hPopupWnd, &pid_popup);
+			if (pid_main == pid_popup)
+				ShowWindow(hPopupWnd, SW_HIDE);
+*/
 		}
-
-		// Scan ADs recursive
-		GetWindowRect(hKakaoTalkMain, &RectKakaoTalkMain);
-		EnumWindows(EnumWindowProc, NULL);
-		EnumChildWindows(hKakaoTalkMain, EnumChildProc, NULL);
-		
-		// Block popup AD
-		DWORD pid_main = 0;
-		DWORD pid_popup = 0;
-		HWND hPopupWnd = FindWindow(L"RichPopWnd", L"");
-		GetWindowThreadProcessId(hKakaoTalkMain, &pid_main);
-		GetWindowThreadProcessId(hPopupWnd, &pid_popup);
-		if (pid_main == pid_popup)
-			ShowWindow(hPopupWnd, SW_HIDE);
-		
 		break;
 	}
 }

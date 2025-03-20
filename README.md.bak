@@ -26,7 +26,7 @@ Ad removal tool for Windows KakaoTalk
 
 ### 1.0.0.13
 
-<sup>Mar. 20, 2025</sup>
+<sup>Mar. 17, 2025</sup>
 
 - Fixed an issue where traces of the ad area could be visible at the bottom of the main window after removing an ad
 - Prevents the ad area in the main window from appearing even after exiting KakaoTalk AdGuard
