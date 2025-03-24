@@ -9,6 +9,11 @@ Ad removal tool for Windows KakaoTalk
 - Support Autorun on system startup (installation version only)
 - Support Installer and Uninstaller
 
+## Command Line Arguments
+
+- --startup: Use the tray menu for the installation version
+- --restore_tray: Show the hidden tray icon
+
 ## Download
 
 - Before or after installation, Specify the installation directory path (default: `%appdata%\KakaoTalkAdGuard`) as an exception path in your antivirus software settings. Because this binary file is not well known, antivirus software may detect it as malware.
