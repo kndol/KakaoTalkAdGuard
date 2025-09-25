@@ -29,6 +29,13 @@ Ad removal tool for Windows KakaoTalk
 
 ## Release notes
 
+### 1.0.0.14
+
+<sup>2025년 9월 25일</sup>
+
+- 메뉴 및 메시지 한글화
+- 새 버전 검사 기능 추가
+
 ### 1.0.0.13
 
 <sup>Mar. 20, 2025</sup>

@@ -6,8 +6,8 @@
 # Define consts
 !define PRODUCT_FULLNAME "KakaoTalk AdGuard"
 !define PRODUCT_NAME "KakaoTalkAdGuard"
-!define PRODUCT_COMMENTS "Ad removal tool for Windows KakaoTalk"
-!define PRODUCT_VERSION "1.0.0.13"
+!define PRODUCT_COMMENTS "카카오톡 윈도 버전용 광고 제거 프로그램"
+!define PRODUCT_VERSION "1.0.0.14"
 !define BUILD_ARCH "x64"
 !define PRODUCT_PUBLISHER "loopback.kr / KnDol Soft"
 !define PRODUCT_REG_ROOTKEY "HKCU"
@@ -26,7 +26,7 @@
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_UNPAGE_FINISH
-!insertmacro MUI_LANGUAGE "English"
+!insertmacro MUI_LANGUAGE "Korean"
 
 OutFile "${PRODUCT_NAME}_${PRODUCT_VERSION}.Setup.exe"
 InstallDirRegKey HKCU "SOFTWARE\${PRODUCT_NAME}" "InstallPath"
@@ -69,8 +69,8 @@ Section "Installer Section"
     ; File "RestoreTrayIcon.exe"
     CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
     CreateShortcut "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_FULLNAME}.lnk" "$INSTDIR\${PRODUCT_NAME}.exe" "--startup"
-    CreateShortcut "$SMPROGRAMS\${PRODUCT_NAME}\Restore tray icon.lnk" "$INSTDIR\${PRODUCT_NAME}.exe" "--restore_tray"
-    CreateShortcut "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
+    CreateShortcut "$SMPROGRAMS\${PRODUCT_NAME}\트레이 아이콘 복원.lnk" "$INSTDIR\${PRODUCT_NAME}.exe" "--restore_tray"
+    CreateShortcut "$SMPROGRAMS\${PRODUCT_NAME}\설치 제거.lnk" "$INSTDIR\Uninstall.exe"
 
     WriteUninstaller "$INSTDIR\Uninstall.exe"
     WriteRegStr ${PRODUCT_REG_ROOTKEY} "${PRODUCT_UNINST_KEY}" "DisplayName" "${PRODUCT_FULLNAME}"
@@ -112,12 +112,12 @@ Function CheckVCRedist2022
     SetRegView 64
     ${If} ${RunningX64}
         ;Registry Version을 읽는다.
-        ReadRegStr $R9 HKLM "SOFTWARE\Classes\Installer\Dependencies\VC,redist.x64,amd64,14.42,bundle" "Version"
+        ReadRegStr $R9 HKLM "SOFTWARE\Classes\Installer\Dependencies\VC,redist.x64,amd64,14.44,bundle" "Version"
         ; if VS 2022 redist not installed, install it
         IfErrors 0 VSRedistInstalled
         ;Registry Version을 읽는다.
     ${Else}
-        ReadRegStr $R9 HKLM "SOFTWARE\Classes\Installer\Dependencies\VC,redist.x86,x86,14.42,bundle" "Version"
+        ReadRegStr $R9 HKLM "SOFTWARE\Classes\Installer\Dependencies\VC,redist.x86,x86,14.44,bundle" "Version"
         ; if VS 2022 redist not installed, install it
         IfErrors 0 VSRedistInstalled
     ${EndIf}

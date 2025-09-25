@@ -1,5 +1,9 @@
 ﻿#include "framework.h"
 #include "KakaoTalkAdGuard.h"
+#include <winhttp.h>
+#include <string>
+#include <vector>
+#pragma comment(lib, "winhttp.lib")
 
 // Global variables
 HINSTANCE       hInst;
@@ -25,7 +29,8 @@ VOID             ShowContextMenu(HWND hwnd, POINT pt);
 BOOL             ShowNewUpdateBalloon();
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 VOID CALLBACK    TimerProc(HWND hwnd, UINT message, UINT idEvent, DWORD dwTimer);
-
+// 스레드에서 실행될 함수
+DWORD WINAPI GitHubCheckThread(LPVOID lpParam);
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR lpCmdLine, _In_ int nCmdShow) {
 	// Parse command-line
@@ -110,6 +115,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 		if (!hideTrayIcon && !bClose && !bRestoretray) {
 			CreateTrayIcon(hWnd, &nid);
 		}
+		CreateThread(NULL, 0, GitHubCheckThread, (LPVOID)hWnd, 0, NULL);
 		break;
 	case WM_NOTIFYCALLBACK:
 		switch (LOWORD(lParam)) {
@@ -443,4 +449,125 @@ VOID CALLBACK TimerProc(HWND hwnd, UINT message, UINT idEvent, DWORD dwTimer) {
 		}
 		break;
 	}
+}
+
+// GitHub Releases API에서 latest 정보를 가져오는 간단한 함수
+static bool HttpGetUtf8(const wchar_t* host, const wchar_t* path, std::string& outBody) {
+	HINTERNET hSession = WinHttpOpen(L"KakaoTalkAdGuard-Agent/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+	if (!hSession) return false;
+	HINTERNET hConnect = WinHttpConnect(hSession, host, INTERNET_DEFAULT_HTTPS_PORT, 0);
+	if (!hConnect) { WinHttpCloseHandle(hSession); return false; }
+
+	HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"GET", path, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
+	if (!hRequest) { WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession); return false; }
+
+	// GitHub API 요구 헤더
+	WinHttpAddRequestHeaders(hRequest, L"User-Agent: KakaoTalkAdGuard\r\n", (ULONG)-1L, WINHTTP_ADDREQ_FLAG_ADD);
+	WinHttpAddRequestHeaders(hRequest, L"Accept: application/vnd.github.v3+json\r\n", (ULONG)-1L, WINHTTP_ADDREQ_FLAG_ADD);
+
+	BOOL bSend = WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
+	if (!bSend) { WinHttpCloseHandle(hRequest); WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession); return false; }
+	if (!WinHttpReceiveResponse(hRequest, NULL)) { WinHttpCloseHandle(hRequest); WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession); return false; }
+
+	std::vector<char> buffer;
+	DWORD dwRead = 0;
+	do {
+		DWORD dwAvailable = 0;
+		if (!WinHttpQueryDataAvailable(hRequest, &dwAvailable)) break;
+		if (dwAvailable == 0) break;
+		std::vector<char> chunk(dwAvailable);
+		if (!WinHttpReadData(hRequest, chunk.data(), dwAvailable, &dwRead) || dwRead == 0) break;
+		buffer.insert(buffer.end(), chunk.begin(), chunk.begin() + dwRead);
+	} while (dwRead != 0);
+
+	WinHttpCloseHandle(hRequest);
+	WinHttpCloseHandle(hConnect);
+	WinHttpCloseHandle(hSession);
+
+	// GitHub 응답은 UTF-8이므로 그대로 std::string에 저장
+	outBody.assign(buffer.begin(), buffer.end());
+	return true;
+}
+
+// GitHub에서 latest tag_name을 파싱하여 현재 버전과 비교하고 알림을 띄움
+BOOL CheckGitHubLatestUpdate(HWND hWnd) {
+	const wchar_t* host = L"api.github.com";
+	// 저장소: kndol/KakaoTalkAdGuard — 필요하면 변경
+	const wchar_t* path = L"/repos/kndol/KakaoTalkAdGuard/releases/latest";
+	const wchar_t* url = L"https://github.com/kndol/KakaoTalkAdGuard/releases/latest";
+	
+	std::string body;
+	if (!HttpGetUtf8(host, path, body)) return FALSE;
+
+	// 간단한 문자열 파싱: "tag_name":"v1.2.3"
+	const std::string key = "\"tag_name\":";
+	size_t pos = body.find(key);
+	if (pos == std::string::npos) return FALSE;
+	pos = body.find('"', pos + key.length());
+	if (pos == std::string::npos) return FALSE;
+	size_t start = pos + 1;
+	size_t end = body.find('"', start);
+	if (end == std::string::npos) return FALSE;
+	std::string latestTag = body.substr(start, end - start);
+
+	// 현재 애플리케이션 버전을 리소스에서 읽어서 비교 (wide -> utf8)
+	WCHAR currentVersionW[64] = L"";
+	LoadStringW(hInst, IDS_APP_VERSION, currentVersionW, ARRAYSIZE(currentVersionW));
+	// 변환: WCHAR(UTF-16) -> UTF-8
+	int utf8len = WideCharToMultiByte(CP_UTF8, 0, currentVersionW, -1, NULL, 0, NULL, NULL);
+	std::string currentVersion;
+	if (utf8len > 0) {
+		currentVersion.resize(utf8len - 1);
+		WideCharToMultiByte(CP_UTF8, 0, currentVersionW, -1, &currentVersion[0], utf8len, NULL, NULL);
+	}
+
+#ifdef _DEBUG
+	currentVersion = "1.0.0.12"; // 테스트
+#endif // _DEBUG
+
+	if (!currentVersion.empty() && latestTag > currentVersion) {
+		// 새 버전 존재: 트레이 풍선(정의된 함수 사용) 또는 메시지 박스
+		// ShowNewUpdateBalloon()는 기존에 정의되어 있으므로 호출
+		ShowNewUpdateBalloon();
+
+		// 추가 상세 알림: 메시지 박스로 새 버전과 다운로드 페이지 링크 제공
+		std::wstring msg;
+		std::wstring latestTagW;
+		{
+			// UTF-8 latestTag -> UTF-16
+			int wlen = MultiByteToWideChar(CP_UTF8, 0, latestTag.c_str(), -1, NULL, 0);
+			latestTagW.resize((wlen > 0) ? (wlen - 1) : 0);
+			if (wlen > 0) MultiByteToWideChar(CP_UTF8, 0, latestTag.c_str(), -1, &latestTagW[0], wlen);
+		}
+		WCHAR msgNewTitle[MAX_LOADSTRING];
+		WCHAR msgNew1[MAX_LOADSTRING];
+		WCHAR msgNew2[MAX_LOADSTRING];
+		WCHAR msgCurVer[MAX_LOADSTRING];
+		WCHAR msgNewVer[MAX_LOADSTRING];
+		LoadStringW(hInst, IDS_NEWUPDATE_TITLE, msgNewTitle , MAX_LOADSTRING);
+		LoadStringW(hInst, IDS_NEWUPDATE_CONTENT, msgNew1, MAX_LOADSTRING);
+		LoadStringW(hInst, IDS_NEWUPDATE_OPENPAGE, msgNew2, MAX_LOADSTRING);
+		LoadStringW(hInst, IDS_CUR_VERSION, msgCurVer, MAX_LOADSTRING);
+		LoadStringW(hInst, IDS_NEW_VERSION, msgNewVer, MAX_LOADSTRING);
+
+		msg = msgNew1;
+		msg += L"\r\n\r\n";
+		msg += msgCurVer + std::wstring(currentVersion.begin(), currentVersion.end()) + L"\r\n";
+		msg += msgNewVer + latestTagW + L"\r\n\r\n";
+		msg += msgNew2;
+
+		// release 페이지 열기
+		if (MessageBoxW(hWnd, msg.c_str(), msgNewTitle, MB_YESNO | MB_ICONINFORMATION | MB_TOPMOST) == IDYES)
+			ShellExecuteW(NULL, L"open", url, NULL, NULL, SW_SHOWNORMAL);
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+// 스레드 엔트리 포인트
+DWORD WINAPI GitHubCheckThread(LPVOID lpParam) {
+	HWND hWnd = (HWND)lpParam;
+	CheckGitHubLatestUpdate(hWnd);
+	return 0;
 }

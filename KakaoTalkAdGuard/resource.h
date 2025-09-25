@@ -14,6 +14,9 @@
 #define IDC_KAKAOTALKADGUARD_RESTORETRAY 110
 #define IDS_MSGBOX_RESTORETRAY          111
 #define IDS_APP_VERSION                 112
+#define IDS_NEWUPDATE_OPENPAGE          113
+#define IDS_CUR_VERSION                 114
+#define IDS_NEW_VERSION                 115
 #define IDR_MAINFRAME                   128
 #define IDR_TRAY_CONTEXTMENU            133
 #define IDI_ICON1                       134
@@ -33,6 +36,7 @@
 #define IDM__TEST                       32782
 #define ID__APP_TITLE                   32783
 #define ID__ENHANCEDBYKNDOL             32784
+#define ID__ENHANCEDBYKNDOL32785        32785
 #define IDC_STATIC                      -1
 
 // Next default values for new objects
@@ -41,7 +45,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        135
-#define _APS_NEXT_COMMAND_VALUE         32785
+#define _APS_NEXT_COMMAND_VALUE         32786
 #define _APS_NEXT_CONTROL_VALUE         1000
 #define _APS_NEXT_SYMED_VALUE           110
 #endif
