@@ -7,12 +7,15 @@
 
 // Global variables
 HINSTANCE       hInst;
+HWND            g_hWnd = NULL;
 LPWSTR          szCmdLine = 0;
 WCHAR           szTitle[MAX_LOADSTRING];
 WCHAR           szWindowClass[MAX_LOADSTRING];
 UINT            updateRate = 100;
 BOOL            autoStartup = false;
 BOOL            hideTrayIcon = false;
+BOOL            showUpdateBalloon = true;
+BOOL            openUpdatePage = true;
 NOTIFYICONDATA  nid = {sizeof(nid)};
 BOOL            bPortable = true;
 
@@ -22,11 +25,13 @@ BOOL             InitInstance(HINSTANCE, int);
 BOOL             CheckMultipleExecution(HINSTANCE hInst, HWND hWnd, WCHAR szWindowClass[MAX_LOADSTRING]);
 BOOL             HideTrayIcon(HINSTANCE hInst, HWND hWnd, NOTIFYICONDATA nid);
 BOOL             ToggleStartup(HWND hWnd);
+BOOL             ToggleShowBalloon(HWND hWnd);
+BOOL             ToggleOpenPage(HWND hWnd);
 BOOL             CheckStartup(HINSTANCE hInst, HWND hWnd);
 BOOL             CreateTrayIcon(HWND hWnd, NOTIFYICONDATA* nid);
 BOOL             DeleteTrayIcon(NOTIFYICONDATA nid);
 VOID             ShowContextMenu(HWND hwnd, POINT pt);
-BOOL             ShowNewUpdateBalloon();
+BOOL             ShowNewUpdateBalloon(LPCWSTR title, LPCWSTR msg);
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 VOID CALLBACK    TimerProc(HWND hwnd, UINT message, UINT idEvent, DWORD dwTimer);
 // 스레드에서 실행될 함수
@@ -76,8 +81,8 @@ ATOM MyRegisterClass(HINSTANCE hInstance) {
 
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
 	hInst = hInstance;
-	HWND hWnd = CreateWindowW(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, nullptr);
-	if (!hWnd) { return FALSE; }
+	g_hWnd = CreateWindowW(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, nullptr);
+	if (!g_hWnd) { return FALSE; }
 	/*ShowWindow(hWnd, nCmdShow);
 	UpdateWindow(hWnd);*/
 	return TRUE;
@@ -99,7 +104,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 			HKEY key; DWORD dwDisp;
 			if (RegCreateKeyEx(HKEY_CURRENT_USER, REG_CFG, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &key, &dwDisp) == ERROR_SUCCESS) {
 				DWORD value = 0;
-				RegSetValueExW(key, L"HideTrayIcon", 0, REG_DWORD, (const BYTE*) &value, sizeof(value));
+				RegSetValueExW(key, REG_HIDETRAYICON, 0, REG_DWORD, (const BYTE*) &value, sizeof(value));
 			}
 			RegCloseKey(key);
 			HWND hKakaoTalkAdGuardMain = FindWindow(L"KakaoTalkAdGuard", NULL);
@@ -115,7 +120,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 		if (!hideTrayIcon && !bClose && !bRestoretray) {
 			CreateTrayIcon(hWnd, &nid);
 		}
-		CreateThread(NULL, 0, GitHubCheckThread, (LPVOID)hWnd, 0, NULL);
+		if (showUpdateBalloon || openUpdatePage)
+			CreateThread(NULL, 0, GitHubCheckThread, (LPVOID)hWnd, 0, NULL);
 		break;
 	case WM_NOTIFYCALLBACK:
 		switch (LOWORD(lParam)) {
@@ -135,10 +141,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 		}
 		break;
 	case WM_INITMENU:
-		if (autoStartup)
-			CheckMenuItem((HMENU) wParam, IDM_STARTONSYSTEMSTARTUP, MF_BYCOMMAND | MF_CHECKED);
-		else
-			CheckMenuItem((HMENU) wParam, IDM_STARTONSYSTEMSTARTUP, MF_BYCOMMAND | MF_UNCHECKED);
+		CheckMenuItem((HMENU) wParam, IDM_STARTONSYSTEMSTARTUP, MF_BYCOMMAND | autoStartup ? MF_CHECKED : MF_UNCHECKED);
+		CheckMenuItem((HMENU)wParam, IDM_SHOWUPDATEBALLOON, MF_BYCOMMAND | showUpdateBalloon ? MF_CHECKED : MF_UNCHECKED);
+		CheckMenuItem((HMENU)wParam, IDM_OPENNEWVERSIONPAGE, MF_BYCOMMAND | openUpdatePage ? MF_CHECKED : MF_UNCHECKED);
 
 	case WM_COMMAND:
 	{
@@ -148,6 +153,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 			break;
 		case IDM_STARTONSYSTEMSTARTUP:
 			ToggleStartup(hWnd);
+			break;
+		case IDM_SHOWUPDATEBALLOON:
+			ToggleShowBalloon(hWnd);
+			break;
+		case IDM_OPENNEWVERSIONPAGE:
+			ToggleOpenPage(hWnd);
 			break;
 		case IDM_EXIT:
 			DestroyWindow(hWnd);
@@ -186,12 +197,17 @@ BOOL CheckStartup(HINSTANCE hInst, HWND hWnd) {
 	DWORD dwType = REG_DWORD;
 	DWORD dwValue = 0;
 	DWORD dwDataSize = sizeof(DWORD);
-	DWORD ret = RegQueryValueExW(key, L"HideTrayIcon", 0, &dwType, (LPBYTE) &dwValue, &dwDataSize);
-	if (dwValue) {
-		hideTrayIcon = TRUE;
-	} else {
-		hideTrayIcon = FALSE;
-	}
+	RegQueryValueExW(key, REG_HIDETRAYICON, 0, &dwType, (LPBYTE) &dwValue, &dwDataSize);
+	hideTrayIcon = dwValue ? TRUE  : FALSE;
+
+	dwValue = 1;
+	RegQueryValueExW(key, REG_SHOWUPDATEBALLOON, 0, &dwType, (LPBYTE)&dwValue, &dwDataSize);
+	showUpdateBalloon = dwValue ? TRUE : FALSE;
+
+	dwValue = 1;
+	RegQueryValueExW(key, REG_OPENUPDATEPAGE, 0, &dwType, (LPBYTE)&dwValue, &dwDataSize);
+	openUpdatePage = dwValue ? TRUE : FALSE;
+
 	RegCloseKey(key);
 	return 0;
 }
@@ -217,15 +233,36 @@ BOOL ToggleStartup(HWND hWnd) {
 	return 0;
 }
 
+BOOL ToggleShowBalloon(HWND hWnd) {
+	HKEY key; DWORD dwDisp;
+	if (RegCreateKeyEx(HKEY_CURRENT_USER, REG_CFG, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &key, &dwDisp) == ERROR_SUCCESS) {
+		showUpdateBalloon = !showUpdateBalloon;
+		DWORD value = showUpdateBalloon;// ? 1 : 0;
+		RegSetValueExW(key, REG_SHOWUPDATEBALLOON, 0, REG_DWORD, (const BYTE*)&value, sizeof(value));
+	}
+	RegCloseKey(key);
+	return 0;
+}
+
+BOOL ToggleOpenPage(HWND hWnd) {
+	HKEY key; DWORD dwDisp;
+	if (RegCreateKeyEx(HKEY_CURRENT_USER, REG_CFG, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &key, &dwDisp) == ERROR_SUCCESS) {
+		openUpdatePage = !openUpdatePage;
+		DWORD value = openUpdatePage;
+		RegSetValueExW(key, REG_OPENUPDATEPAGE, 0, REG_DWORD, (const BYTE*)&value, sizeof(value));
+	}
+	RegCloseKey(key);
+	return 0;
+}
+
 BOOL HideTrayIcon(HINSTANCE hInst, HWND hWnd, NOTIFYICONDATA nid) {
 	WCHAR msgboxHideTray[MAX_LOADSTRING];
 	LoadStringW(hInst, IDS_MSGBOX_HIDETRAY, msgboxHideTray, MAX_LOADSTRING);
 	MessageBox(hWnd, msgboxHideTray, NULL, MB_ICONWARNING);
 	HKEY key; DWORD dwDisp;
-	LSTATUS ret;
 	if (RegCreateKeyEx(HKEY_CURRENT_USER, REG_CFG, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &key, &dwDisp) == ERROR_SUCCESS) {
 		DWORD value = 1;
-		ret = RegSetValueExW(key, L"HideTrayIcon", 0, REG_DWORD, (const BYTE*) &value, sizeof(value));
+		RegSetValueExW(key, REG_HIDETRAYICON, 0, REG_DWORD, (const BYTE*) &value, sizeof(value));
 	}
 	RegCloseKey(key);
 	DeleteTrayIcon(nid);
@@ -244,12 +281,17 @@ BOOL CheckMultipleExecution(HINSTANCE hInst, HWND hWnd, WCHAR szWindowClass[MAX_
 	return 0;
 }
 
-BOOL ShowNewUpdateBalloon() {
+BOOL ShowNewUpdateBalloon(LPCWSTR title, LPCWSTR msg) {
 	NOTIFYICONDATA nid = {sizeof(nid)};
-	nid.uFlags = NIF_INFO;
-	nid.dwInfoFlags = NIIF_INFO;
-	LoadStringW(hInst, IDS_NEWUPDATE_TITLE, nid.szInfoTitle, ARRAYSIZE(nid.szInfoTitle));
-	LoadStringW(hInst, IDS_NEWUPDATE_CONTENT, nid.szInfo, ARRAYSIZE(nid.szInfo));
+	nid.cbSize = sizeof(nid);
+	nid.hWnd = g_hWnd;
+	nid.uFlags = NIF_MESSAGE | NIF_INFO | NIF_ICON;
+	nid.dwInfoFlags = NIIF_INFO;        // 풍선 알림아이콘 종류
+	nid.hIcon = LoadIconW(hInst, MAKEINTRESOURCE(IDI_LOGO));
+	nid.uCallbackMessage = WM_NOTIFYCALLBACK;
+	nid.uTimeout = 5000;
+	lstrcpyW(nid.szInfo, msg);
+	lstrcpyW(nid.szInfoTitle, title);
 	return Shell_NotifyIcon(NIM_MODIFY, &nid);
 }
 
@@ -522,16 +564,13 @@ BOOL CheckGitHubLatestUpdate(HWND hWnd) {
 	}
 
 #ifdef _DEBUG
-	currentVersion = "1.0.0.12"; // 테스트
+	currentVersion = "1.0.0.14"; // 테스트
+	latestTag = "1.0.0.15";
 #endif // _DEBUG
 
 	if (!currentVersion.empty() && latestTag > currentVersion) {
-		// 새 버전 존재: 트레이 풍선(정의된 함수 사용) 또는 메시지 박스
-		// ShowNewUpdateBalloon()는 기존에 정의되어 있으므로 호출
-		ShowNewUpdateBalloon();
-
 		// 추가 상세 알림: 메시지 박스로 새 버전과 다운로드 페이지 링크 제공
-		std::wstring msg;
+		std::wstring msg, balloonMsg;
 		std::wstring latestTagW;
 		{
 			// UTF-8 latestTag -> UTF-16
@@ -556,8 +595,16 @@ BOOL CheckGitHubLatestUpdate(HWND hWnd) {
 		msg += msgNewVer + latestTagW + L"\r\n\r\n";
 		msg += msgNew2;
 
+		balloonMsg = msgNew1;
+		balloonMsg += L"\r\n";
+		balloonMsg += msgCurVer + std::wstring(currentVersion.begin(), currentVersion.end()) + L"\r\n";
+		balloonMsg += msgNewVer + latestTagW;
+
 		// release 페이지 열기
-		if (MessageBoxW(hWnd, msg.c_str(), msgNewTitle, MB_YESNO | MB_ICONINFORMATION | MB_TOPMOST) == IDYES)
+		// 새 버전 존재: 트레이 풍선(정의된 함수 사용) 또는 메시지 박스
+		if (showUpdateBalloon)
+			ShowNewUpdateBalloon(msgNewTitle, balloonMsg.c_str());
+		if (openUpdatePage && MessageBoxW(hWnd, msg.c_str(), msgNewTitle, MB_YESNO | MB_ICONINFORMATION | MB_TOPMOST) == IDYES)
 			ShellExecuteW(NULL, L"open", url, NULL, NULL, SW_SHOWNORMAL);
 		return TRUE;
 	}

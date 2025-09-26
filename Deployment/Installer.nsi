@@ -7,7 +7,7 @@
 !define PRODUCT_FULLNAME "KakaoTalk AdGuard"
 !define PRODUCT_NAME "KakaoTalkAdGuard"
 !define PRODUCT_COMMENTS "카카오톡 윈도 버전용 광고 제거 프로그램"
-!define PRODUCT_VERSION "1.0.0.14"
+!define PRODUCT_VERSION "1.0.0.15"
 !define BUILD_ARCH "x64"
 !define PRODUCT_PUBLISHER "loopback.kr / KnDol Soft"
 !define PRODUCT_REG_ROOTKEY "HKCU"

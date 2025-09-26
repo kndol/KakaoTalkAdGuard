@@ -4,4 +4,5 @@ Release/*
 */Release/*
 .vs/
 KakaoTalkAdGuard*.exe
-Deployment/KakaoTalkAdGuard_1.0.0.14.Setup.zip
+KakaoTalkAdGuard*.zip
+*.bak
