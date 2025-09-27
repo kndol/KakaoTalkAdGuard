@@ -564,8 +564,8 @@ BOOL CheckGitHubLatestUpdate(HWND hWnd) {
 	}
 
 #ifdef _DEBUG
-	currentVersion = "1.0.0.14"; // 테스트
-	latestTag = "1.0.0.15";
+	currentVersion = "1.0.0.15"; // 테스트
+	latestTag = "1.0.0.16";
 #endif // _DEBUG
 
 	if (!currentVersion.empty() && latestTag > currentVersion) {
@@ -589,21 +589,17 @@ BOOL CheckGitHubLatestUpdate(HWND hWnd) {
 		LoadStringW(hInst, IDS_CUR_VERSION, msgCurVer, MAX_LOADSTRING);
 		LoadStringW(hInst, IDS_NEW_VERSION, msgNewVer, MAX_LOADSTRING);
 
-		msg = msgNew1;
-		msg += L"\r\n\r\n";
-		msg += msgCurVer + std::wstring(currentVersion.begin(), currentVersion.end()) + L"\r\n";
-		msg += msgNewVer + latestTagW + L"\r\n\r\n";
-		msg += msgNew2;
-
 		balloonMsg = msgNew1;
-		balloonMsg += L"\r\n";
+		balloonMsg += L"\r\n\r\n";
 		balloonMsg += msgCurVer + std::wstring(currentVersion.begin(), currentVersion.end()) + L"\r\n";
 		balloonMsg += msgNewVer + latestTagW;
+		msg = balloonMsg + L"\r\n\r\n";
+		msg += msgNew2;
 
 		// release 페이지 열기
 		// 새 버전 존재: 트레이 풍선(정의된 함수 사용) 또는 메시지 박스
 		if (showUpdateBalloon)
-			ShowNewUpdateBalloon(msgNewTitle, balloonMsg.c_str());
+			ShowNewUpdateBalloon(L"", balloonMsg.c_str());
 		if (openUpdatePage && MessageBoxW(hWnd, msg.c_str(), msgNewTitle, MB_YESNO | MB_ICONINFORMATION | MB_TOPMOST) == IDYES)
 			ShellExecuteW(NULL, L"open", url, NULL, NULL, SW_SHOWNORMAL);
 		return TRUE;
