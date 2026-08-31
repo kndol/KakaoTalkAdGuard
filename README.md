@@ -4,24 +4,24 @@ Ad removal tool for Windows KakaoTalk
 
 ## Features
 
-- No framework libraries required
-- Support Windows and Windows Server including all language versions
-- Support Autorun on system startup (installation version only)
-- Support Installer and Uninstaller
+* No framework libraries required
+* Support Windows and Windows Server including all language versions
+* Support Autorun on system startup (installation version only)
+* Support Installer and Uninstaller
 
 ## Command Line Arguments
 
-- --startup: Use the tray menu for the installation version
-- --restore_tray: Show the hidden tray icon
+* \--startup: Use the tray menu for the installation version
+* \--restore\_tray: Show the hidden tray icon
 
 ## Download
 
-- Before or after installation, Specify the installation directory path (default: `%appdata%\KakaoTalkAdGuard`) as an exception path in your antivirus software settings. Because this binary file is not well known, antivirus software may detect it as malware.
-- [Go to Release page to download](https://github.com/kndol/KakaoTalkAdGuard/releases)
+* Before or after installation, Specify the installation directory path (default: `%appdata%\KakaoTalkAdGuard`) as an exception path in your antivirus software settings. Because this binary file is not well known, antivirus software may detect it as malware.
+* [Go to Release page to download](https://github.com/kndol/KakaoTalkAdGuard/releases)
 
 ## Known issues
 
-- On Windows with HiDPI, the trayicon menu is displayed in an abnormal position.
+* On Windows with HiDPI, the trayicon menu is displayed in an abnormal position.
 
 ## Preview
 
@@ -29,12 +29,22 @@ Ad removal tool for Windows KakaoTalk
 
 ## Release notes
 
+### 1.0.1.0
+
+<sup>2026년 8월 31일</sup>
+
+* 배너 광고 노출 최소화\
+  ![TrayMenu 1.0.1.0](./Docs/TrayMenu_1.0.1.0.png)
+
+* 변수 이름 정리
+* 설치할 때 전체 사용자용 설치와 현재 사용자용 설치를 선택할 수 있게 설치 스크립트 개선
+
 ### 1.0.0.15
 
 <sup>2025년 9월 27일</sup>
 
-- 설치 버전의 경우 업데이트 알림 사용 여부를 트레이 메뉴에서 선택할 수 있게 함
-- 업데이트 알림을 풍선 알림으로 표시하기 추가
+* 설치 버전의 경우 업데이트 알림 사용 여부를 트레이 메뉴에서 선택할 수 있게 함
+* 업데이트 알림을 풍선 알림으로 표시하기 추가
 
 ![image](Docs/TrayMenu.png)
 
@@ -46,105 +56,105 @@ Ad removal tool for Windows KakaoTalk
 
 <sup>2025년 9월 25일</sup>
 
-- 메뉴 및 메시지 한글화
-- 새 버전 검사 기능 추가
+* 메뉴 및 메시지 한글화
+* 새 버전 검사 기능 추가
 
 ### 1.0.0.13
 
 <sup>Mar. 20, 2025</sup>
 
-- Fixed an issue where traces of the ad area could be visible at the bottom of the main window after removing an ad
-- Prevents the ad area in the main window from appearing even after exiting KakaoTalk AdGuard
-- Optimize internal logic
+* Fixed an issue where traces of the ad area could be visible at the bottom of the main window after removing an ad
+* Prevents the ad area in the main window from appearing even after exiting KakaoTalk AdGuard
+* Optimize internal logic
 
 ### 1.0.0.12
 
 <sup>Mar. 09, 2025</sup>
 
-- Fixed an issue where the chromium browser window disappears when KakaoTalk is not running but KakaoTalkAdGuard is running
-- Fixed an issue where KakaoTalk disappeared when opening the notification window of KakaoTalk.
-- Fixed by KnDol
+* Fixed an issue where the chromium browser window disappears when KakaoTalk is not running but KakaoTalkAdGuard is running
+* Fixed an issue where KakaoTalk disappeared when opening the notification window of KakaoTalk.
+* Fixed by KnDol
 
 ### 1.0.0.11
 
 <sup>Dec. 19, 2024</sup>
 
-- Fixed an issue with ADs appearing in version 4.3.0.4263
+* Fixed an issue with ADs appearing in version 4.3.0.4263
 
 ### 1.0.0.10
 
 <sup>May 9, 2024</sup>
 
-- Fixed an issue where ads were not blocked when opening a KakaoTalk window and message notification windows were open at the same time
+* Fixed an issue where ads were not blocked when opening a KakaoTalk window and message notification windows were open at the same time
 
 ### 1.0.0.9
 
 <sup>May 4, 2024</sup>
 
-- Fixed an issue that updated profiles disappeared
+* Fixed an issue that updated profiles disappeared
 
 ### 1.0.0.8
 
 <sup>Apr. 27, 2024</sup>
 
-- Hotfix for the lockdown setting window not appearing issue
+* Hotfix for the lockdown setting window not appearing issue
 
 ### 1.0.0.7
 
 <sup>Apr. 27, 2024</sup>
 
-- Support for multilingual versions of KakaoTalk
-- Changed banner ad blocking criteria
-- Removed white box at lockdown mode
-- Code refactoring
+* Support for multilingual versions of KakaoTalk
+* Changed banner ad blocking criteria
+* Removed white box at lockdown mode
+* Code refactoring
 
 ### 1.0.0.6
 
 <sup>Apr. 22, 2024</sup>
 
-- Hotfix for the profile window not appearing issue
+* Hotfix for the profile window not appearing issue
 
 ### 1.0.0.5
 
 <sup>Apr. 22, 2024</sup>
 
-- Support KakaoTalk version 4
+* Support KakaoTalk version 4
 
 ### 1.0.0.4
 
 <sup>Apr. 20, 2024</sup>
 
-- Hotfix for KakaoTalk version 4 (experimental)
+* Hotfix for KakaoTalk version 4 (experimental)
 
 ### 1.0.0.3
 
 <sup>Jun. 23, 2023</sup>
 
-- Support 32-bit architecture
-- Support portable version trayicon context menu
-- Changed restoring trayicon mechanism
+* Support 32-bit architecture
+* Support portable version trayicon context menu
+* Changed restoring trayicon mechanism
 
 ### 1.0.0.2
 
 <sup>Jun. 1, 2023</sup>
 
-- Improved stability of trayicon
-- Improved stability for popup ad removal mechanism
-- Changed context menu items for trayicon
-- Fixed an issue that a registry key was not deleted when uninstalling
-- Update icon for uninstallation
-- Minimized Windows UAC permissions
-- Changed installation mechanism to close running processes
-- Added version attributes and uninstall information
+* Improved stability of trayicon
+* Improved stability for popup ad removal mechanism
+* Changed context menu items for trayicon
+* Fixed an issue that a registry key was not deleted when uninstalling
+* Update icon for uninstallation
+* Minimized Windows UAC permissions
+* Changed installation mechanism to close running processes
+* Added version attributes and uninstall information
 
 ### 1.0.0.1
 
 <sup>May 30, 2023</sup>
 
-- Fixed issue where the send button was removed when sending files in chat room.
+* Fixed issue where the send button was removed when sending files in chat room.
 
 ### 1.0.0.0
 
 <sup>May 29, 2023</sup>
 
-- Initial release
+* Initial release

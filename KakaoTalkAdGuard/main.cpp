@@ -3,21 +3,23 @@
 #include <winhttp.h>
 #include <string>
 #include <vector>
+#include <chrono>
 #pragma comment(lib, "winhttp.lib")
 
 // Global variables
-HINSTANCE       hInst;
+HINSTANCE       g_hInst;
 HWND            g_hWnd = NULL;
-LPWSTR          szCmdLine = 0;
-WCHAR           szTitle[MAX_LOADSTRING];
-WCHAR           szWindowClass[MAX_LOADSTRING];
-UINT            updateRate = 100;
-BOOL            autoStartup = false;
-BOOL            hideTrayIcon = false;
-BOOL            showUpdateBalloon = true;
-BOOL            openUpdatePage = true;
-NOTIFYICONDATA  nid = {sizeof(nid)};
-BOOL            bPortable = true;
+LPWSTR          g_szCmdLine = 0;
+WCHAR           g_szTitle[MAX_LOADSTRING];
+WCHAR           g_szWindowClass[MAX_LOADSTRING];
+UINT            g_iUpdateRate = 100;
+BOOL            g_bAutoStartup = false;
+BOOL            g_bHideTrayIcon = false;
+BOOL            g_bUpdateBannerAdRegistry = false;
+BOOL            g_bShowUpdateBalloon = true;
+BOOL            g_bOpenUpdatePage = true;
+BOOL            g_bPortable = true;
+NOTIFYICONDATA  g_stNID = {sizeof(g_stNID)};
 
 // Forward-declaration
 ATOM             MyRegisterClass(HINSTANCE hInstance);
@@ -25,6 +27,7 @@ BOOL             InitInstance(HINSTANCE, int);
 BOOL             CheckMultipleExecution(HINSTANCE hInst, HWND hWnd, WCHAR szWindowClass[MAX_LOADSTRING]);
 BOOL             HideTrayIcon(HINSTANCE hInst, HWND hWnd, NOTIFYICONDATA nid);
 BOOL             ToggleStartup(HWND hWnd);
+BOOL             ToggleUpdateBannerAdRegistry(HWND hWnd);
 BOOL             ToggleShowBalloon(HWND hWnd);
 BOOL             ToggleOpenPage(HWND hWnd);
 BOOL             CheckStartup(HINSTANCE hInst, HWND hWnd);
@@ -32,6 +35,7 @@ BOOL             CreateTrayIcon(HWND hWnd, NOTIFYICONDATA* nid);
 BOOL             DeleteTrayIcon(NOTIFYICONDATA nid);
 VOID             ShowContextMenu(HWND hwnd, POINT pt);
 BOOL             ShowNewUpdateBalloon(LPCWSTR title, LPCWSTR msg);
+VOID             SetLUDForAllSubkeys();
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 VOID CALLBACK    TimerProc(HWND hwnd, UINT message, UINT idEvent, DWORD dwTimer);
 // 스레드에서 실행될 함수
@@ -40,15 +44,15 @@ DWORD WINAPI GitHubCheckThread(LPVOID lpParam);
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR lpCmdLine, _In_ int nCmdShow) {
 	// Parse command-line
 	if (lpCmdLine != L"") {
-		szCmdLine = lpCmdLine;
+		g_szCmdLine = lpCmdLine;
 	}
 	
 	// Load resources
-	LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
-	if (lstrcmpW(szCmdLine, L"--restore_tray") == 0) {
-		LoadStringW(hInstance, IDC_KAKAOTALKADGUARD_RESTORETRAY, szWindowClass, MAX_LOADSTRING);
+	LoadStringW(hInstance, IDS_APP_TITLE, g_szTitle, MAX_LOADSTRING);
+	if (lstrcmpW(g_szCmdLine, L"--restore_tray") == 0) {
+		LoadStringW(hInstance, IDC_KAKAOTALKADGUARD_RESTORETRAY, g_szWindowClass, MAX_LOADSTRING);
 	} else {
-		LoadStringW(hInstance, IDC_KAKAOTALKADGUARD, szWindowClass, MAX_LOADSTRING);
+		LoadStringW(hInstance, IDC_KAKAOTALKADGUARD, g_szWindowClass, MAX_LOADSTRING);
 	}
 
 	// Initialize Window
@@ -74,14 +78,14 @@ ATOM MyRegisterClass(HINSTANCE hInstance) {
 	wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
 	wcex.hbrBackground = (HBRUSH) (COLOR_WINDOW + 1);
 	wcex.lpszMenuName = nullptr;
-	wcex.lpszClassName = szWindowClass;
+	wcex.lpszClassName = g_szWindowClass;
 	wcex.hIconSm = LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_LOGO));
 	return RegisterClassExW(&wcex);
 }
 
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
-	hInst = hInstance;
-	g_hWnd = CreateWindowW(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, nullptr);
+	g_hInst = hInstance;
+	g_hWnd = CreateWindowW(g_szWindowClass, g_szTitle, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, nullptr);
 	if (!g_hWnd) { return FALSE; }
 	/*ShowWindow(hWnd, nCmdShow);
 	UpdateWindow(hWnd);*/
@@ -97,9 +101,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 	switch (message) {
 	case WM_CREATE:
 		// Preprocess arguments
-		if (lstrcmpW(szCmdLine, L"--startup") == 0) {
-			bPortable = false;
-		} else if (lstrcmpW(szCmdLine, L"--restore_tray") == 0) {
+		if (lstrcmpW(g_szCmdLine, L"--startup") == 0) {
+			g_bPortable = false;
+		} else if (lstrcmpW(g_szCmdLine, L"--restore_tray") == 0) {
 			bRestoretray = TRUE;
 			HKEY key; DWORD dwDisp;
 			if (RegCreateKeyEx(HKEY_CURRENT_USER, REG_CFG, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &key, &dwDisp) == ERROR_SUCCESS) {
@@ -114,13 +118,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 			PostQuitMessage(0);
 		}
 
-		bClose = CheckMultipleExecution(hInst, hWnd, szWindowClass);
-		hTimer = (HANDLE) SetTimer(hWnd, 1, updateRate, (TIMERPROC) TimerProc);
-		CheckStartup(hInst, hWnd);
-		if (!hideTrayIcon && !bClose && !bRestoretray) {
-			CreateTrayIcon(hWnd, &nid);
+		bClose = CheckMultipleExecution(g_hInst, hWnd, g_szWindowClass);
+		hTimer = (HANDLE) SetTimer(hWnd, 1, g_iUpdateRate, (TIMERPROC) TimerProc);
+		CheckStartup(g_hInst, hWnd);
+		if (!g_bHideTrayIcon && !bClose && !bRestoretray) {
+			CreateTrayIcon(hWnd, &g_stNID);
 		}
-		if (showUpdateBalloon || openUpdatePage)
+		if (g_bShowUpdateBalloon || g_bOpenUpdatePage)
 			CreateThread(NULL, 0, GitHubCheckThread, (LPVOID)hWnd, 0, NULL);
 		break;
 	case WM_NOTIFYCALLBACK:
@@ -135,24 +139,35 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 		}
 		break;
 	case WM_RECHECK:
-		CheckStartup(hInst, hWnd);
-		if (!hideTrayIcon) {
-			CreateTrayIcon(hWnd, &nid);
+		CheckStartup(g_hInst, hWnd);
+		if (!g_bHideTrayIcon) {
+			if (CreateTrayIcon(hWnd, &g_stNID))
+			{
+				WCHAR msgboxHideTray[MAX_LOADSTRING];
+				WCHAR msgboxTitle[MAX_LOADSTRING];
+				LoadStringW(g_hInst, IDS_MSGBOX_RESTORETRAY, msgboxHideTray, MAX_LOADSTRING);
+				LoadStringW(g_hInst, IDS_APP_NAME, msgboxTitle, MAX_LOADSTRING);
+				MessageBox(hWnd, msgboxHideTray, msgboxTitle, MB_ICONINFORMATION);
+			}
 		}
 		break;
 	case WM_INITMENU:
-		CheckMenuItem((HMENU) wParam, IDM_STARTONSYSTEMSTARTUP, MF_BYCOMMAND | autoStartup ? MF_CHECKED : MF_UNCHECKED);
-		CheckMenuItem((HMENU)wParam, IDM_SHOWUPDATEBALLOON, MF_BYCOMMAND | showUpdateBalloon ? MF_CHECKED : MF_UNCHECKED);
-		CheckMenuItem((HMENU)wParam, IDM_OPENNEWVERSIONPAGE, MF_BYCOMMAND | openUpdatePage ? MF_CHECKED : MF_UNCHECKED);
+		CheckMenuItem((HMENU)wParam, IDM_STARTONSYSTEMSTARTUP, MF_BYCOMMAND | (g_bAutoStartup ? MF_CHECKED : MF_UNCHECKED));
+		CheckMenuItem((HMENU)wParam, IDM_SHOWUPDATEBALLOON, MF_BYCOMMAND | (g_bShowUpdateBalloon ? MF_CHECKED : MF_UNCHECKED));
+		CheckMenuItem((HMENU)wParam, IDM_OPENNEWVERSIONPAGE, MF_BYCOMMAND | (g_bOpenUpdatePage ? MF_CHECKED : MF_UNCHECKED));
+		CheckMenuItem((HMENU)wParam, IDM_UPDATEBANNERADREGISTRY, MF_BYCOMMAND | (g_bUpdateBannerAdRegistry ? MF_CHECKED : MF_UNCHECKED));
 
 	case WM_COMMAND:
 	{
 		switch (LOWORD(wParam)) {
 		case IDM_HIDETRAYICON:
-			HideTrayIcon(hInst, hWnd, nid);
+			HideTrayIcon(g_hInst, hWnd, g_stNID);
 			break;
 		case IDM_STARTONSYSTEMSTARTUP:
 			ToggleStartup(hWnd);
+			break;
+		case IDM_UPDATEBANNERADREGISTRY:
+			ToggleUpdateBannerAdRegistry(hWnd);
 			break;
 		case IDM_SHOWUPDATEBALLOON:
 			ToggleShowBalloon(hWnd);
@@ -169,9 +184,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 	}
 	break;
 	case WM_DESTROY:
+		// 프로그램 종료 시 배너 광고 막기 시도
+		SetLUDForAllSubkeys();
 		KillTimer(hWnd, 1);
-		DeleteTrayIcon(nid);
+		DeleteTrayIcon(g_stNID);
 		PostQuitMessage(0);
+		break;
+	case WM_ENDSESSION:
+		// 윈도우 종료 시 배너 광고 막기 시도
+		SetLUDForAllSubkeys();
 		break;
 	default:
 		return DefWindowProc(hWnd, message, wParam, lParam);
@@ -184,11 +205,7 @@ BOOL CheckStartup(HINSTANCE hInst, HWND hWnd) {
 	HKEY key; DWORD dwDisp;
 	RegCreateKeyEx(HKEY_CURRENT_USER, REG_RUN, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &key, &dwDisp);
 
-	if (RegQueryValueExW(key, L"KakaoTalkAdGuard", 0, NULL, 0, NULL) == NO_ERROR) {
-		autoStartup = true;
-	} else {
-		autoStartup = false;
-	}
+	g_bAutoStartup = (RegQueryValueExW(key, L"KakaoTalkAdGuard", 0, NULL, 0, NULL) == NO_ERROR);
 	RegCloseKey(key);
 	SendMessage(hWnd, WM_INITMENU, 0, 0);
 
@@ -197,18 +214,23 @@ BOOL CheckStartup(HINSTANCE hInst, HWND hWnd) {
 	DWORD dwType = REG_DWORD;
 	DWORD dwValue = 0;
 	DWORD dwDataSize = sizeof(DWORD);
-	RegQueryValueExW(key, REG_HIDETRAYICON, 0, &dwType, (LPBYTE) &dwValue, &dwDataSize);
-	hideTrayIcon = dwValue ? TRUE  : FALSE;
+
+	g_bHideTrayIcon = (RegQueryValueExW(key, REG_HIDETRAYICON, 0, &dwType, (LPBYTE)&dwValue, &dwDataSize) == ERROR_SUCCESS && dwValue != 0);
 
 	dwValue = 1;
-	RegQueryValueExW(key, REG_SHOWUPDATEBALLOON, 0, &dwType, (LPBYTE)&dwValue, &dwDataSize);
-	showUpdateBalloon = dwValue ? TRUE : FALSE;
+	g_bShowUpdateBalloon = (RegQueryValueExW(key, REG_SHOWUPDATEBALLOON, 0, &dwType, (LPBYTE)&dwValue, &dwDataSize) == ERROR_SUCCESS && dwValue != 0);
 
 	dwValue = 1;
-	RegQueryValueExW(key, REG_OPENUPDATEPAGE, 0, &dwType, (LPBYTE)&dwValue, &dwDataSize);
-	openUpdatePage = dwValue ? TRUE : FALSE;
+	g_bOpenUpdatePage = (RegQueryValueExW(key, REG_OPENUPDATEPAGE, 0, &dwType, (LPBYTE)&dwValue, &dwDataSize) == ERROR_SUCCESS && dwValue != 0);
 
+	dwValue = 1;
+	g_bUpdateBannerAdRegistry = (RegQueryValueExW(key, REG_UPDATEBANNARADREG, 0, &dwType, (LPBYTE)&dwValue, &dwDataSize) == ERROR_SUCCESS && dwValue != 0);
+	
 	RegCloseKey(key);
+
+	// 배너 광고 막기
+	SetLUDForAllSubkeys();
+
 	return 0;
 }
 
@@ -218,7 +240,7 @@ BOOL ToggleStartup(HWND hWnd) {
 
 	if (RegQueryValueExW(key, L"KakaoTalkAdGuard", 0, NULL, 0, NULL) == NO_ERROR) {
 		RegDeleteValueW(key, L"KakaoTalkAdGuard");
-		autoStartup = false;
+		g_bAutoStartup = false;
 	} else {
 		WCHAR szFileName[MAX_PATH];
 		WCHAR szFileNameFinal[MAX_PATH] = L"\"";
@@ -227,7 +249,18 @@ BOOL ToggleStartup(HWND hWnd) {
 		lstrcatW(szFileNameFinal, L"\"");
 		lstrcatW(szFileNameFinal, L" --startup");
 		RegSetValueExW(key, L"KakaoTalkAdGuard", 0, REG_SZ, (LPBYTE) szFileNameFinal, (lstrlenW(szFileNameFinal) + 1) * sizeof(WCHAR));
-		autoStartup = true;
+		g_bAutoStartup = true;
+	}
+	RegCloseKey(key);
+	return 0;
+}
+
+BOOL ToggleUpdateBannerAdRegistry(HWND hWnd) {
+	HKEY key; DWORD dwDisp;
+	if (RegCreateKeyEx(HKEY_CURRENT_USER, REG_CFG, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &key, &dwDisp) == ERROR_SUCCESS) {
+		g_bUpdateBannerAdRegistry = !g_bUpdateBannerAdRegistry;
+		DWORD value = g_bUpdateBannerAdRegistry;// ? 1 : 0;
+		RegSetValueExW(key, REG_UPDATEBANNARADREG, 0, REG_DWORD, (const BYTE*)&value, sizeof(value));
 	}
 	RegCloseKey(key);
 	return 0;
@@ -236,8 +269,8 @@ BOOL ToggleStartup(HWND hWnd) {
 BOOL ToggleShowBalloon(HWND hWnd) {
 	HKEY key; DWORD dwDisp;
 	if (RegCreateKeyEx(HKEY_CURRENT_USER, REG_CFG, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &key, &dwDisp) == ERROR_SUCCESS) {
-		showUpdateBalloon = !showUpdateBalloon;
-		DWORD value = showUpdateBalloon;// ? 1 : 0;
+		g_bShowUpdateBalloon = !g_bShowUpdateBalloon;
+		DWORD value = g_bShowUpdateBalloon;// ? 1 : 0;
 		RegSetValueExW(key, REG_SHOWUPDATEBALLOON, 0, REG_DWORD, (const BYTE*)&value, sizeof(value));
 	}
 	RegCloseKey(key);
@@ -247,8 +280,8 @@ BOOL ToggleShowBalloon(HWND hWnd) {
 BOOL ToggleOpenPage(HWND hWnd) {
 	HKEY key; DWORD dwDisp;
 	if (RegCreateKeyEx(HKEY_CURRENT_USER, REG_CFG, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &key, &dwDisp) == ERROR_SUCCESS) {
-		openUpdatePage = !openUpdatePage;
-		DWORD value = openUpdatePage;
+		g_bOpenUpdatePage = !g_bOpenUpdatePage;
+		DWORD value = g_bOpenUpdatePage;
 		RegSetValueExW(key, REG_OPENUPDATEPAGE, 0, REG_DWORD, (const BYTE*)&value, sizeof(value));
 	}
 	RegCloseKey(key);
@@ -257,8 +290,11 @@ BOOL ToggleOpenPage(HWND hWnd) {
 
 BOOL HideTrayIcon(HINSTANCE hInst, HWND hWnd, NOTIFYICONDATA nid) {
 	WCHAR msgboxHideTray[MAX_LOADSTRING];
+	WCHAR msgboxTitle[MAX_LOADSTRING];
 	LoadStringW(hInst, IDS_MSGBOX_HIDETRAY, msgboxHideTray, MAX_LOADSTRING);
-	MessageBox(hWnd, msgboxHideTray, NULL, MB_ICONWARNING);
+	LoadStringW(g_hInst, IDS_APP_NAME, msgboxTitle, MAX_LOADSTRING);
+	MessageBox(hWnd, msgboxHideTray, msgboxTitle, MB_ICONWARNING);
+
 	HKEY key; DWORD dwDisp;
 	if (RegCreateKeyEx(HKEY_CURRENT_USER, REG_CFG, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &key, &dwDisp) == ERROR_SUCCESS) {
 		DWORD value = 1;
@@ -273,8 +309,10 @@ BOOL CheckMultipleExecution(HINSTANCE hInst, HWND hWnd, WCHAR szWindowClass[MAX_
 	CreateMutex(NULL, TRUE, szWindowClass);
 	if (GetLastError() == ERROR_ALREADY_EXISTS) {
 		WCHAR msgboxIsRunning[MAX_LOADSTRING];
+		WCHAR msgboxTitle[MAX_LOADSTRING];
 		LoadStringW(hInst, IDS_MSGBOX_ISRUNNING, msgboxIsRunning, MAX_LOADSTRING);
-		MessageBox(hWnd, msgboxIsRunning, NULL, MB_ICONWARNING);
+		LoadStringW(g_hInst, IDS_APP_NAME, msgboxTitle, MAX_LOADSTRING);
+		MessageBox(hWnd, msgboxIsRunning, msgboxTitle, MB_ICONWARNING);
 		PostQuitMessage(0);
 		return 1;
 	}
@@ -287,7 +325,7 @@ BOOL ShowNewUpdateBalloon(LPCWSTR title, LPCWSTR msg) {
 	nid.hWnd = g_hWnd;
 	nid.uFlags = NIF_MESSAGE | NIF_INFO | NIF_ICON;
 	nid.dwInfoFlags = NIIF_INFO;        // 풍선 알림아이콘 종류
-	nid.hIcon = LoadIconW(hInst, MAKEINTRESOURCE(IDI_LOGO));
+	nid.hIcon = LoadIconW(g_hInst, MAKEINTRESOURCE(IDI_LOGO));
 	nid.uCallbackMessage = WM_NOTIFYCALLBACK;
 	nid.uTimeout = 5000;
 	lstrcpyW(nid.szInfo, msg);
@@ -298,8 +336,8 @@ BOOL ShowNewUpdateBalloon(LPCWSTR title, LPCWSTR msg) {
 BOOL CreateTrayIcon(HWND hWnd, NOTIFYICONDATA* nid) {
 	nid->hWnd = hWnd;
 	nid->uFlags = NIF_ICON | NIF_TIP | NIF_MESSAGE | NIF_SHOWTIP;
-	LoadString(hInst, IDS_APP_NAME, nid->szTip, ARRAYSIZE(nid->szTip));
-	nid->hIcon = LoadIcon(hInst, MAKEINTRESOURCE(IDI_LOGO));
+	LoadString(g_hInst, IDS_APP_NAME, nid->szTip, ARRAYSIZE(nid->szTip));
+	nid->hIcon = LoadIcon(g_hInst, MAKEINTRESOURCE(IDI_LOGO));
 	nid->uCallbackMessage = WM_NOTIFYCALLBACK;
 	Shell_NotifyIcon(NIM_ADD, nid);
 	nid->uVersion = NOTIFYICON_VERSION_4;
@@ -316,17 +354,17 @@ void ShowContextMenu(HWND hwnd, POINT pt) {
 	WCHAR szVersion[MAX_LOADSTRING];
 	WCHAR szFullAppName[MAX_LOADSTRING];
 	szFullAppName[0] = L'\0';
-	LoadStringW(hInst, IDS_APP_NAME, szAppName, MAX_LOADSTRING);
-	LoadStringW(hInst, IDS_APP_VERSION, szVersion, MAX_LOADSTRING);
+	LoadStringW(g_hInst, IDS_APP_NAME, szAppName, MAX_LOADSTRING);
+	LoadStringW(g_hInst, IDS_APP_VERSION, szVersion, MAX_LOADSTRING);
 	wcscpy_s(szFullAppName, szAppName);
 	wcscat_s(szFullAppName, L" ");
 	wcscat_s(szFullAppName, szVersion);
 
-	if (bPortable) {
-		hMenu = LoadMenu(hInst, MAKEINTRESOURCE(IDR_TRAY_CONTEXTMENU_PORTABLE));
+	if (g_bPortable) {
+		hMenu = LoadMenu(g_hInst, MAKEINTRESOURCE(IDR_TRAY_CONTEXTMENU_PORTABLE));
 		ModifyMenuW(hMenu, ID__APP_TITLE, MF_BYCOMMAND | MF_STRING | MF_DISABLED, ID__APP_TITLE, (LPCWSTR) szFullAppName);
 	} else {
-		hMenu = LoadMenu(hInst, MAKEINTRESOURCE(IDR_TRAY_CONTEXTMENU));
+		hMenu = LoadMenu(g_hInst, MAKEINTRESOURCE(IDR_TRAY_CONTEXTMENU));
 		ModifyMenuW(hMenu, ID__APP_TITLE, MF_BYCOMMAND | MF_STRING | MF_DISABLED, ID__APP_TITLE, (LPCWSTR)szFullAppName);
 	}
 	HMENU hSubMenu = GetSubMenu(hMenu, 0);
@@ -399,16 +437,6 @@ BOOL CALLBACK EnumChildProcFromMainWin(HWND hwnd, LPARAM lParam) {
 		if (hLockdownNumpad != NULL)
 			SetWindowPos(hwnd, HWND_TOP, 0, 0, (RectKakaoTalkMain.right - RectKakaoTalkMain.left), (RectKakaoTalkMain.bottom - RectKakaoTalkMain.top), SWP_NOMOVE);
 	}
-/*
-	if (wcscmp(className, L"BannerAdWnd") == 0) {
-		ShowWindow(hwnd, SW_HIDE);
-		return TRUE;
-	}
-	if (wcscmp(className, L"RichPopWnd") == 0) {
-		ShowWindow(hwnd, SW_HIDE);
-		return TRUE;
-	}
-*/
 	if (wcscmp(className, L"EVA_VH_ListControl_Dblclk") == 0) { // 광고 제거 후 채팅 목록 다시 그리기
 		InvalidateRect(hwnd, NULL, TRUE);
 		return TRUE;
@@ -455,6 +483,41 @@ BOOL CALLBACK EnumChildProcFromSubWin(HWND hwnd, LPARAM lParam) {
 	return TRUE;
 }
 
+void SetLUDForAllSubkeys() {
+	HKEY hParentKey;
+
+	if (!g_bUpdateBannerAdRegistry || RegOpenKeyExW(HKEY_CURRENT_USER, L"SOFTWARE\\Kakao\\AdFit", 0, KEY_READ | KEY_WRITE | KEY_ENUMERATE_SUB_KEYS, &hParentKey) != ERROR_SUCCESS) {
+		return;
+	}
+
+	DWORD dwIndex = 0;
+	wchar_t subkeyName[256];
+	DWORD subkeyNameSize = sizeof(subkeyName) / sizeof(wchar_t);
+	FILETIME ftLastWritten;
+
+	while (RegEnumKeyExW(hParentKey, dwIndex, subkeyName, &subkeyNameSize, NULL, NULL, NULL, &ftLastWritten) == ERROR_SUCCESS) {
+
+		std::wstring subkeyPath = L"SOFTWARE\\Kakao\\AdFit\\";
+		subkeyPath += subkeyName;
+
+		HKEY hSubKey;
+		DWORD dwDisp;
+		if (RegCreateKeyExW(HKEY_CURRENT_USER, subkeyPath.c_str(), 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hSubKey, &dwDisp) == ERROR_SUCCESS) {
+
+			auto now = std::chrono::system_clock::now();
+			auto posix_time = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
+			std::wstring str_time = std::to_wstring(posix_time);
+
+			RegSetValueExW(hSubKey, L"LUD", 0, REG_SZ, (const BYTE*)str_time.c_str(), (DWORD)((str_time.length() + 1) * sizeof(wchar_t)));
+			RegCloseKey(hSubKey);
+		}
+
+		dwIndex++;
+		subkeyNameSize = sizeof(subkeyName) / sizeof(wchar_t);
+	}
+	RegCloseKey(hParentKey);
+}
+
 VOID CALLBACK TimerProc(HWND hwnd, UINT message, UINT idEvent, DWORD dwTimer) {
 	switch (idEvent) {
 	case 1: // Remove KakaoTalk ADs
@@ -468,7 +531,7 @@ VOID CALLBACK TimerProc(HWND hwnd, UINT message, UINT idEvent, DWORD dwTimer) {
 		}
 		if (hKakaoTalkMain != NULL) // 카카오톡이 실행되어 있지 않으면 진행 안 함
 		{
-			// Scan ADs recursive
+			// 카카오톡 메인 창 광고 막기
 			hAdFit = FindWindow(L"EVA_Window_Dblclk", L"");
 			if (hAdFit != NULL && IsWindowVisible(hAdFit)) { // 광고 창이 보일 때만 진행
 				EnumChildWindows(hAdFit, EnumChildProcFromSubWin, NULL);
@@ -477,17 +540,6 @@ VOID CALLBACK TimerProc(HWND hwnd, UINT message, UINT idEvent, DWORD dwTimer) {
 				GetWindowRect(hKakaoTalkMain, &RectKakaoTalkMain);
 				EnumChildWindows(hKakaoTalkMain, EnumChildProcFromMainWin, NULL);
 			}
-			//EnumWindows(EnumWindowProc, NULL);
-/*
-			// Block popup AD
-			DWORD pid_main = 0;
-			DWORD pid_popup = 0;
-			HWND hPopupWnd = FindWindow(L"RichPopWnd", L"");
-			GetWindowThreadProcessId(hKakaoTalkMain, &pid_main);
-			GetWindowThreadProcessId(hPopupWnd, &pid_popup);
-			if (pid_main == pid_popup)
-				ShowWindow(hPopupWnd, SW_HIDE);
-*/
 		}
 		break;
 	}
@@ -554,7 +606,7 @@ BOOL CheckGitHubLatestUpdate(HWND hWnd) {
 
 	// 현재 애플리케이션 버전을 리소스에서 읽어서 비교 (wide -> utf8)
 	WCHAR currentVersionW[64] = L"";
-	LoadStringW(hInst, IDS_APP_VERSION, currentVersionW, ARRAYSIZE(currentVersionW));
+	LoadStringW(g_hInst, IDS_APP_VERSION, currentVersionW, ARRAYSIZE(currentVersionW));
 	// 변환: WCHAR(UTF-16) -> UTF-8
 	int utf8len = WideCharToMultiByte(CP_UTF8, 0, currentVersionW, -1, NULL, 0, NULL, NULL);
 	std::string currentVersion;
@@ -563,11 +615,12 @@ BOOL CheckGitHubLatestUpdate(HWND hWnd) {
 		WideCharToMultiByte(CP_UTF8, 0, currentVersionW, -1, &currentVersion[0], utf8len, NULL, NULL);
 	}
 
+/*
 #ifdef _DEBUG
 	currentVersion = "1.0.0.15"; // 테스트
 	latestTag = "1.0.0.16";
 #endif // _DEBUG
-
+*/
 	if (!currentVersion.empty() && latestTag > currentVersion) {
 		// 추가 상세 알림: 메시지 박스로 새 버전과 다운로드 페이지 링크 제공
 		std::wstring msg, balloonMsg;
@@ -583,11 +636,11 @@ BOOL CheckGitHubLatestUpdate(HWND hWnd) {
 		WCHAR msgNew2[MAX_LOADSTRING];
 		WCHAR msgCurVer[MAX_LOADSTRING];
 		WCHAR msgNewVer[MAX_LOADSTRING];
-		LoadStringW(hInst, IDS_NEWUPDATE_TITLE, msgNewTitle , MAX_LOADSTRING);
-		LoadStringW(hInst, IDS_NEWUPDATE_CONTENT, msgNew1, MAX_LOADSTRING);
-		LoadStringW(hInst, IDS_NEWUPDATE_OPENPAGE, msgNew2, MAX_LOADSTRING);
-		LoadStringW(hInst, IDS_CUR_VERSION, msgCurVer, MAX_LOADSTRING);
-		LoadStringW(hInst, IDS_NEW_VERSION, msgNewVer, MAX_LOADSTRING);
+		LoadStringW(g_hInst, IDS_NEWUPDATE_TITLE, msgNewTitle , MAX_LOADSTRING);
+		LoadStringW(g_hInst, IDS_NEWUPDATE_CONTENT, msgNew1, MAX_LOADSTRING);
+		LoadStringW(g_hInst, IDS_NEWUPDATE_OPENPAGE, msgNew2, MAX_LOADSTRING);
+		LoadStringW(g_hInst, IDS_CUR_VERSION, msgCurVer, MAX_LOADSTRING);
+		LoadStringW(g_hInst, IDS_NEW_VERSION, msgNewVer, MAX_LOADSTRING);
 
 		balloonMsg = msgNew1;
 		balloonMsg += L"\r\n\r\n";
@@ -598,9 +651,9 @@ BOOL CheckGitHubLatestUpdate(HWND hWnd) {
 
 		// release 페이지 열기
 		// 새 버전 존재: 트레이 풍선(정의된 함수 사용) 또는 메시지 박스
-		if (showUpdateBalloon)
+		if (g_bShowUpdateBalloon)
 			ShowNewUpdateBalloon(L"", balloonMsg.c_str());
-		if (openUpdatePage && MessageBoxW(hWnd, msg.c_str(), msgNewTitle, MB_YESNO | MB_ICONINFORMATION | MB_TOPMOST) == IDYES)
+		if (g_bOpenUpdatePage && MessageBox(hWnd, msg.c_str(), msgNewTitle, MB_YESNO | MB_ICONINFORMATION | MB_TOPMOST) == IDYES)
 			ShellExecuteW(NULL, L"open", url, NULL, NULL, SW_SHOWNORMAL);
 		return TRUE;
 	}
