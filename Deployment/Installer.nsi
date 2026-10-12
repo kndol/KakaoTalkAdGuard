@@ -355,7 +355,7 @@ Section "Installer Section"
     ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
     IntFmt $0 "0x%08X" $0
     WriteRegDWORD SHCTX "${PRODUCT_UNINST_KEY}" "EstimatedSize" "$0"
-    # WriteRegStr SHCTX "${PRODUCT_UNINST_KEY}" "Contact" "mailto:hyunseoki@outlook.kr"
+    # WriteRegStr SHCTX "${PRODUCT_UNINST_KEY}" "Contact" "mailto:kndol@kndol.net"
     WriteRegStr SHCTX "${PRODUCT_UNINST_KEY}" "HelpLink" "https://github.com/kndol/KakaoTalkAdGuard/issues"
     # WriteRegStr SHCTX "${PRODUCT_UNINST_KEY}" "URLInfoAbout" "https://github.com/kndol/KakaoTalkAdGuard/issues"
     WriteRegStr SHCTX "${PRODUCT_UNINST_KEY}" "URLUpdateInfo" "https://github.com/kndol/KakaoTalkAdGuard#release-notes"
