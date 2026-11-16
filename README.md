@@ -11,7 +11,6 @@ Ad removal tool for Windows KakaoTalk
 
 ## Command Line Arguments
 
-* \--startup: Use the tray menu for the installation version
 * \--restore\_tray: Show the hidden tray icon
 
 ## Download
@@ -28,6 +27,20 @@ Ad removal tool for Windows KakaoTalk
 ![Highlights](Docs/Highlights.png)
 
 ## Release notes
+
+### 1.0.2.0
+
+<sup>2026년 11월 16일</sup>
+
+* 환경 설정 창 추가\
+  ![TrayMenu 1.0.2.0](./Docs/TrayMenu_1.0.2.0.png)
+  ![Setup](./Docs/Setup.png)
+
+* 광고 검사 주기 설정 추가 (기본값 100ms)
+  * 10~10,000ms까지 설정 가능
+
+* \--startup 실행 파라메터 삭제
+  * 이제 독립 실행 버전이나 설치 버전 모두 동일한 메뉴가 보입니다.
 
 ### 1.0.1.0
 

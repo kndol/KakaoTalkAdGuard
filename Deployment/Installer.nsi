@@ -9,7 +9,7 @@
 !define PRODUCT_FULLNAME "KakaoTalk AdGuard"
 !define PRODUCT_NAME "KakaoTalkAdGuard"
 !define PRODUCT_COMMENTS "카카오톡 윈도 버전용 광고 제거 프로그램"
-!define PRODUCT_VERSION "1.0.1.0"
+!define PRODUCT_VERSION "1.0.2.0"
 !define BUILD_ARCH "x64"
 !define PRODUCT_PUBLISHER "loopback.kr / KnDol Soft"
 !define PRODUCT_DIR_REGKEY "Software\${PRODUCT_NAME}"
@@ -294,7 +294,7 @@ Function LaunchApp
         ;관리자 권한으로 실행되지 않도록 탐색기를 통해 바로 가기를 실행.
         Exec '"$WINDIR\explorer.exe" "$SMPROGRAMS\${PRODUCT_FULLNAME}\${PRODUCT_FULLNAME}.lnk"'
     ${Else}
-        Exec '"$INSTDIR\${PRODUCT_NAME}.exe" --startup'
+        Exec '"$INSTDIR\${PRODUCT_NAME}.exe"'
     ${EndIf}
 FunctionEnd
 
@@ -339,7 +339,7 @@ Section "Installer Section"
 
     ; File "RestoreTrayIcon.exe"
     CreateDirectory "$SMPROGRAMS\${PRODUCT_FULLNAME}"
-    CreateShortcut "$SMPROGRAMS\${PRODUCT_FULLNAME}\${PRODUCT_FULLNAME}.lnk" "$INSTDIR\${PRODUCT_NAME}.exe" "--startup"
+    CreateShortcut "$SMPROGRAMS\${PRODUCT_FULLNAME}\${PRODUCT_FULLNAME}.lnk" "$INSTDIR\${PRODUCT_NAME}.exe"
     CreateShortcut "$SMPROGRAMS\${PRODUCT_FULLNAME}\트레이 아이콘 복원.lnk" "$INSTDIR\${PRODUCT_NAME}.exe" "--restore_tray"
     CreateShortcut "$SMPROGRAMS\${PRODUCT_FULLNAME}\설치 제거.lnk" "$INSTDIR\Uninstall.exe"
 

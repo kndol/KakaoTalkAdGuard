@@ -1,10 +1,14 @@
 ﻿#include "framework.h"
 #include "KakaoTalkAdGuard.h"
 #include <winhttp.h>
+#include <commctrl.h>
 #include <string>
 #include <vector>
 #include <chrono>
 #pragma comment(lib, "winhttp.lib")
+#pragma comment(lib, "comctl32.lib")
+// 환경 설정 창의 컨트롤에 비주얼 스타일 적용
+#pragma comment(linker, "/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
 // Global variables
 HINSTANCE       g_hInst;
@@ -18,18 +22,18 @@ BOOL            g_bHideTrayIcon = false;
 BOOL            g_bUpdateBannerAdRegistry = false;
 BOOL            g_bShowUpdateBalloon = true;
 BOOL            g_bOpenUpdatePage = true;
-BOOL            g_bPortable = true;
 NOTIFYICONDATA  g_stNID = {sizeof(g_stNID)};
+HWND            g_hSettingsDlg = NULL;
 
 // Forward-declaration
 ATOM             MyRegisterClass(HINSTANCE hInstance);
 BOOL             InitInstance(HINSTANCE, int);
 BOOL             CheckMultipleExecution(HINSTANCE hInst, HWND hWnd, WCHAR szWindowClass[MAX_LOADSTRING]);
 BOOL             HideTrayIcon(HINSTANCE hInst, HWND hWnd, NOTIFYICONDATA nid);
-BOOL             ToggleStartup(HWND hWnd);
-BOOL             ToggleUpdateBannerAdRegistry(HWND hWnd);
-BOOL             ToggleShowBalloon(HWND hWnd);
-BOOL             ToggleOpenPage(HWND hWnd);
+BOOL             SetStartup(BOOL bEnable);
+BOOL             WriteConfigBool(LPCWSTR szName, BOOL bValue);
+VOID             ShowSettingsDialog(HWND hWnd);
+INT_PTR CALLBACK SettingsDlgProc(HWND, UINT, WPARAM, LPARAM);
 BOOL             CheckStartup(HINSTANCE hInst, HWND hWnd);
 BOOL             CreateTrayIcon(HWND hWnd, NOTIFYICONDATA* nid);
 BOOL             DeleteTrayIcon(NOTIFYICONDATA nid);
@@ -101,9 +105,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 	switch (message) {
 	case WM_CREATE:
 		// Preprocess arguments
-		if (lstrcmpW(g_szCmdLine, L"--startup") == 0) {
-			g_bPortable = false;
-		} else if (lstrcmpW(g_szCmdLine, L"--restore_tray") == 0) {
+		if (lstrcmpW(g_szCmdLine, L"--restore_tray") == 0) {
 			bRestoretray = TRUE;
 			HKEY key; DWORD dwDisp;
 			if (RegCreateKeyEx(HKEY_CURRENT_USER, REG_CFG, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &key, &dwDisp) == ERROR_SUCCESS) {
@@ -119,8 +121,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 		}
 
 		bClose = CheckMultipleExecution(g_hInst, hWnd, g_szWindowClass);
+		CheckStartup(g_hInst, hWnd); // 저장된 광고 검사 주기를 읽은 뒤 타이머 시작
 		hTimer = (HANDLE) SetTimer(hWnd, 1, g_iUpdateRate, (TIMERPROC) TimerProc);
-		CheckStartup(g_hInst, hWnd);
 		if (!g_bHideTrayIcon && !bClose && !bRestoretray) {
 			CreateTrayIcon(hWnd, &g_stNID);
 		}
@@ -151,29 +153,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 			}
 		}
 		break;
-	case WM_INITMENU:
-		CheckMenuItem((HMENU)wParam, IDM_STARTONSYSTEMSTARTUP, MF_BYCOMMAND | (g_bAutoStartup ? MF_CHECKED : MF_UNCHECKED));
-		CheckMenuItem((HMENU)wParam, IDM_SHOWUPDATEBALLOON, MF_BYCOMMAND | (g_bShowUpdateBalloon ? MF_CHECKED : MF_UNCHECKED));
-		CheckMenuItem((HMENU)wParam, IDM_OPENNEWVERSIONPAGE, MF_BYCOMMAND | (g_bOpenUpdatePage ? MF_CHECKED : MF_UNCHECKED));
-		CheckMenuItem((HMENU)wParam, IDM_UPDATEBANNERADREGISTRY, MF_BYCOMMAND | (g_bUpdateBannerAdRegistry ? MF_CHECKED : MF_UNCHECKED));
-
 	case WM_COMMAND:
 	{
 		switch (LOWORD(wParam)) {
-		case IDM_HIDETRAYICON:
-			HideTrayIcon(g_hInst, hWnd, g_stNID);
-			break;
-		case IDM_STARTONSYSTEMSTARTUP:
-			ToggleStartup(hWnd);
-			break;
-		case IDM_UPDATEBANNERADREGISTRY:
-			ToggleUpdateBannerAdRegistry(hWnd);
-			break;
-		case IDM_SHOWUPDATEBALLOON:
-			ToggleShowBalloon(hWnd);
-			break;
-		case IDM_OPENNEWVERSIONPAGE:
-			ToggleOpenPage(hWnd);
+		case IDM_SETTINGS:
+			ShowSettingsDialog(hWnd);
 			break;
 		case IDM_EXIT:
 			DestroyWindow(hWnd);
@@ -207,7 +191,6 @@ BOOL CheckStartup(HINSTANCE hInst, HWND hWnd) {
 
 	g_bAutoStartup = (RegQueryValueExW(key, L"KakaoTalkAdGuard", 0, NULL, 0, NULL) == NO_ERROR);
 	RegCloseKey(key);
-	SendMessage(hWnd, WM_INITMENU, 0, 0);
 
 	// Check HideTrayIcon
 	RegCreateKeyEx(HKEY_CURRENT_USER, REG_CFG, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_READ, NULL, &key, &dwDisp);
@@ -225,7 +208,15 @@ BOOL CheckStartup(HINSTANCE hInst, HWND hWnd) {
 
 	dwValue = 1;
 	g_bUpdateBannerAdRegistry = (RegQueryValueExW(key, REG_UPDATEBANNARADREG, 0, &dwType, (LPBYTE)&dwValue, &dwDataSize) == ERROR_SUCCESS && dwValue != 0);
-	
+
+	// 광고 검사 주기(ms): 값이 없거나 범위를 벗어나면 현재 값 유지
+	dwValue = 0;
+	dwDataSize = sizeof(DWORD);
+	if (RegQueryValueExW(key, REG_UPDATERATE, 0, &dwType, (LPBYTE)&dwValue, &dwDataSize) == ERROR_SUCCESS && dwType == REG_DWORD
+		&& dwValue >= UPDATERATE_MIN && dwValue <= UPDATERATE_MAX) {
+		g_iUpdateRate = dwValue;
+	}
+
 	RegCloseKey(key);
 
 	// 배너 광고 막기
@@ -234,58 +225,145 @@ BOOL CheckStartup(HINSTANCE hInst, HWND hWnd) {
 	return 0;
 }
 
-BOOL ToggleStartup(HWND hWnd) {
+BOOL SetStartup(BOOL bEnable) {
 	HKEY key; DWORD dwDisp;
-	RegCreateKeyEx(HKEY_CURRENT_USER, REG_RUN, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &key, &dwDisp);
+	if (RegCreateKeyEx(HKEY_CURRENT_USER, REG_RUN, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &key, &dwDisp) != ERROR_SUCCESS) {
+		return FALSE;
+	}
 
-	if (RegQueryValueExW(key, L"KakaoTalkAdGuard", 0, NULL, 0, NULL) == NO_ERROR) {
-		RegDeleteValueW(key, L"KakaoTalkAdGuard");
-		g_bAutoStartup = false;
-	} else {
+	BOOL bResult;
+	if (bEnable) {
 		WCHAR szFileName[MAX_PATH];
-		WCHAR szFileNameFinal[MAX_PATH] = L"\"";
+		WCHAR szFileNameFinal[MAX_PATH + 16] = L"\"";
 		GetModuleFileName(NULL, szFileName, MAX_PATH);
 		lstrcatW(szFileNameFinal, szFileName);
 		lstrcatW(szFileNameFinal, L"\"");
 		lstrcatW(szFileNameFinal, L" --startup");
-		RegSetValueExW(key, L"KakaoTalkAdGuard", 0, REG_SZ, (LPBYTE) szFileNameFinal, (lstrlenW(szFileNameFinal) + 1) * sizeof(WCHAR));
-		g_bAutoStartup = true;
+		bResult = (RegSetValueExW(key, L"KakaoTalkAdGuard", 0, REG_SZ, (LPBYTE) szFileNameFinal, (lstrlenW(szFileNameFinal) + 1) * sizeof(WCHAR)) == ERROR_SUCCESS);
+	} else {
+		LSTATUS status = RegDeleteValueW(key, L"KakaoTalkAdGuard");
+		bResult = (status == ERROR_SUCCESS || status == ERROR_FILE_NOT_FOUND);
 	}
 	RegCloseKey(key);
-	return 0;
+	if (bResult) {
+		g_bAutoStartup = bEnable;
+	}
+	return bResult;
 }
 
-BOOL ToggleUpdateBannerAdRegistry(HWND hWnd) {
+static BOOL WriteConfigDword(LPCWSTR szName, DWORD value) {
 	HKEY key; DWORD dwDisp;
-	if (RegCreateKeyEx(HKEY_CURRENT_USER, REG_CFG, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &key, &dwDisp) == ERROR_SUCCESS) {
-		g_bUpdateBannerAdRegistry = !g_bUpdateBannerAdRegistry;
-		DWORD value = g_bUpdateBannerAdRegistry;// ? 1 : 0;
-		RegSetValueExW(key, REG_UPDATEBANNARADREG, 0, REG_DWORD, (const BYTE*)&value, sizeof(value));
+	if (RegCreateKeyEx(HKEY_CURRENT_USER, REG_CFG, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &key, &dwDisp) != ERROR_SUCCESS) {
+		return FALSE;
 	}
+	BOOL bResult = (RegSetValueExW(key, szName, 0, REG_DWORD, (const BYTE*)&value, sizeof(value)) == ERROR_SUCCESS);
 	RegCloseKey(key);
-	return 0;
+	return bResult;
 }
 
-BOOL ToggleShowBalloon(HWND hWnd) {
-	HKEY key; DWORD dwDisp;
-	if (RegCreateKeyEx(HKEY_CURRENT_USER, REG_CFG, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &key, &dwDisp) == ERROR_SUCCESS) {
-		g_bShowUpdateBalloon = !g_bShowUpdateBalloon;
-		DWORD value = g_bShowUpdateBalloon;// ? 1 : 0;
-		RegSetValueExW(key, REG_SHOWUPDATEBALLOON, 0, REG_DWORD, (const BYTE*)&value, sizeof(value));
-	}
-	RegCloseKey(key);
-	return 0;
+BOOL WriteConfigBool(LPCWSTR szName, BOOL bValue) {
+	return WriteConfigDword(szName, bValue ? 1 : 0);
 }
 
-BOOL ToggleOpenPage(HWND hWnd) {
-	HKEY key; DWORD dwDisp;
-	if (RegCreateKeyEx(HKEY_CURRENT_USER, REG_CFG, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &key, &dwDisp) == ERROR_SUCCESS) {
-		g_bOpenUpdatePage = !g_bOpenUpdatePage;
-		DWORD value = g_bOpenUpdatePage;
-		RegSetValueExW(key, REG_OPENUPDATEPAGE, 0, REG_DWORD, (const BYTE*)&value, sizeof(value));
+// 환경 설정 창 열기 (이미 열려 있으면 앞으로 가져오기)
+VOID ShowSettingsDialog(HWND hWnd) {
+	if (g_hSettingsDlg != NULL) {
+		SetForegroundWindow(g_hSettingsDlg);
+		return;
 	}
-	RegCloseKey(key);
-	return 0;
+	INITCOMMONCONTROLSEX icc = {sizeof(icc), ICC_STANDARD_CLASSES | ICC_UPDOWN_CLASS};
+	InitCommonControlsEx(&icc);
+	DialogBoxW(g_hInst, MAKEINTRESOURCE(IDD_SETTINGS), hWnd, SettingsDlgProc);
+}
+
+// 환경 설정 창에서 '확인'을 눌렀을 때 바뀐 항목만 반영
+static VOID ApplySettings(HWND hDlg) {
+	BOOL bAutoStartup = (IsDlgButtonChecked(hDlg, IDC_CHK_AUTOSTARTUP) == BST_CHECKED);
+	BOOL bHideTrayIcon = (IsDlgButtonChecked(hDlg, IDC_CHK_HIDETRAYICON) == BST_CHECKED);
+	BOOL bUpdateBannerAdRegistry = (IsDlgButtonChecked(hDlg, IDC_CHK_UPDATEBANNERADREGISTRY) == BST_CHECKED);
+	BOOL bShowUpdateBalloon = (IsDlgButtonChecked(hDlg, IDC_CHK_SHOWUPDATEBALLOON) == BST_CHECKED);
+	BOOL bOpenUpdatePage = (IsDlgButtonChecked(hDlg, IDC_CHK_OPENNEWVERSIONPAGE) == BST_CHECKED);
+
+	if (bAutoStartup != g_bAutoStartup) {
+		SetStartup(bAutoStartup);
+	}
+	if (bUpdateBannerAdRegistry != g_bUpdateBannerAdRegistry && WriteConfigBool(REG_UPDATEBANNARADREG, bUpdateBannerAdRegistry)) {
+		g_bUpdateBannerAdRegistry = bUpdateBannerAdRegistry;
+		SetLUDForAllSubkeys(); // 켠 즉시 한 번 적용
+	}
+	if (bShowUpdateBalloon != g_bShowUpdateBalloon && WriteConfigBool(REG_SHOWUPDATEBALLOON, bShowUpdateBalloon)) {
+		g_bShowUpdateBalloon = bShowUpdateBalloon;
+	}
+	if (bOpenUpdatePage != g_bOpenUpdatePage && WriteConfigBool(REG_OPENUPDATEPAGE, bOpenUpdatePage)) {
+		g_bOpenUpdatePage = bOpenUpdatePage;
+	}
+	// 광고 검사 주기: 범위 검사는 IDOK 처리에서 이미 끝난 상태
+	UINT iUpdateRate = GetDlgItemInt(hDlg, IDC_EDIT_UPDATERATE, NULL, FALSE);
+	if (iUpdateRate != g_iUpdateRate && WriteConfigDword(REG_UPDATERATE, iUpdateRate)) {
+		g_iUpdateRate = iUpdateRate;
+		SetTimer(g_hWnd, 1, g_iUpdateRate, (TIMERPROC) TimerProc); // 같은 ID로 다시 걸면 주기만 바뀜
+	}
+	// 트레이 아이콘을 숨기면 이 창을 다시 열 수 없으므로 마지막에 안내 메시지와 함께 처리
+	if (bHideTrayIcon && !g_bHideTrayIcon) {
+		HideTrayIcon(g_hInst, hDlg, g_stNID);
+	}
+}
+
+INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
+	switch (message) {
+	case WM_INITDIALOG:
+	{
+		g_hSettingsDlg = hDlg;
+		HICON hIcon = LoadIcon(g_hInst, MAKEINTRESOURCE(IDI_LOGO));
+		SendMessage(hDlg, WM_SETICON, ICON_BIG, (LPARAM) hIcon);
+		SendMessage(hDlg, WM_SETICON, ICON_SMALL, (LPARAM) hIcon);
+
+		CheckDlgButton(hDlg, IDC_CHK_AUTOSTARTUP, g_bAutoStartup ? BST_CHECKED : BST_UNCHECKED);
+		CheckDlgButton(hDlg, IDC_CHK_HIDETRAYICON, g_bHideTrayIcon ? BST_CHECKED : BST_UNCHECKED);
+		CheckDlgButton(hDlg, IDC_CHK_UPDATEBANNERADREGISTRY, g_bUpdateBannerAdRegistry ? BST_CHECKED : BST_UNCHECKED);
+		CheckDlgButton(hDlg, IDC_CHK_SHOWUPDATEBALLOON, g_bShowUpdateBalloon ? BST_CHECKED : BST_UNCHECKED);
+		CheckDlgButton(hDlg, IDC_CHK_OPENNEWVERSIONPAGE, g_bOpenUpdatePage ? BST_CHECKED : BST_UNCHECKED);
+
+		// 광고 검사 주기: 10 ~ 10000ms, 화살표를 누르고 있으면 증감 폭이 커짐
+		UDACCEL accel[] = {{0, 10}, {2, 100}, {5, 1000}};
+		SendDlgItemMessage(hDlg, IDC_EDIT_UPDATERATE, EM_SETLIMITTEXT, 5, 0);
+		SendDlgItemMessage(hDlg, IDC_SPIN_UPDATERATE, UDM_SETRANGE32, UPDATERATE_MIN, UPDATERATE_MAX);
+		SendDlgItemMessage(hDlg, IDC_SPIN_UPDATERATE, UDM_SETACCEL, ARRAYSIZE(accel), (LPARAM) accel);
+		SetDlgItemInt(hDlg, IDC_EDIT_UPDATERATE, g_iUpdateRate, FALSE);
+
+		SetForegroundWindow(hDlg);
+		return TRUE;
+	}
+	case WM_COMMAND:
+		switch (LOWORD(wParam)) {
+		case IDOK:
+		{
+			BOOL bTranslated = FALSE;
+			UINT iUpdateRate = GetDlgItemInt(hDlg, IDC_EDIT_UPDATERATE, &bTranslated, FALSE);
+			if (!bTranslated || iUpdateRate < UPDATERATE_MIN || iUpdateRate > UPDATERATE_MAX) {
+				WCHAR msgboxRange[MAX_LOADSTRING];
+				WCHAR msgboxTitle[MAX_LOADSTRING];
+				LoadStringW(g_hInst, IDS_MSGBOX_UPDATERATE_RANGE, msgboxRange, MAX_LOADSTRING);
+				LoadStringW(g_hInst, IDS_APP_NAME, msgboxTitle, MAX_LOADSTRING);
+				MessageBox(hDlg, msgboxRange, msgboxTitle, MB_ICONWARNING);
+				SetFocus(GetDlgItem(hDlg, IDC_EDIT_UPDATERATE));
+				SendDlgItemMessage(hDlg, IDC_EDIT_UPDATERATE, EM_SETSEL, 0, -1);
+				return TRUE;
+			}
+			ApplySettings(hDlg);
+			EndDialog(hDlg, IDOK);
+			return TRUE;
+		}
+		case IDCANCEL:
+			EndDialog(hDlg, IDCANCEL);
+			return TRUE;
+		}
+		break;
+	case WM_DESTROY:
+		g_hSettingsDlg = NULL;
+		break;
+	}
+	return FALSE;
 }
 
 BOOL HideTrayIcon(HINSTANCE hInst, HWND hWnd, NOTIFYICONDATA nid) {
@@ -295,12 +373,8 @@ BOOL HideTrayIcon(HINSTANCE hInst, HWND hWnd, NOTIFYICONDATA nid) {
 	LoadStringW(g_hInst, IDS_APP_NAME, msgboxTitle, MAX_LOADSTRING);
 	MessageBox(hWnd, msgboxHideTray, msgboxTitle, MB_ICONWARNING);
 
-	HKEY key; DWORD dwDisp;
-	if (RegCreateKeyEx(HKEY_CURRENT_USER, REG_CFG, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &key, &dwDisp) == ERROR_SUCCESS) {
-		DWORD value = 1;
-		RegSetValueExW(key, REG_HIDETRAYICON, 0, REG_DWORD, (const BYTE*) &value, sizeof(value));
-	}
-	RegCloseKey(key);
+	WriteConfigBool(REG_HIDETRAYICON, TRUE);
+	g_bHideTrayIcon = true;
 	DeleteTrayIcon(nid);
 	return 0;
 }
@@ -360,13 +434,8 @@ void ShowContextMenu(HWND hwnd, POINT pt) {
 	wcscat_s(szFullAppName, L" ");
 	wcscat_s(szFullAppName, szVersion);
 
-	if (g_bPortable) {
-		hMenu = LoadMenu(g_hInst, MAKEINTRESOURCE(IDR_TRAY_CONTEXTMENU_PORTABLE));
-		ModifyMenuW(hMenu, ID__APP_TITLE, MF_BYCOMMAND | MF_STRING | MF_DISABLED, ID__APP_TITLE, (LPCWSTR) szFullAppName);
-	} else {
-		hMenu = LoadMenu(g_hInst, MAKEINTRESOURCE(IDR_TRAY_CONTEXTMENU));
-		ModifyMenuW(hMenu, ID__APP_TITLE, MF_BYCOMMAND | MF_STRING | MF_DISABLED, ID__APP_TITLE, (LPCWSTR)szFullAppName);
-	}
+	hMenu = LoadMenu(g_hInst, MAKEINTRESOURCE(IDR_TRAY_CONTEXTMENU));
+	ModifyMenuW(hMenu, IDM_APP_TITLE, MF_BYCOMMAND | MF_STRING | MF_DISABLED, IDM_APP_TITLE, (LPCWSTR)szFullAppName);
 	HMENU hSubMenu = GetSubMenu(hMenu, 0);
 	SetForegroundWindow(hwnd); // our window must be foreground before calling TrackPopupMenu or the menu will not disappear when the user clicks away
 	// respect menu drop alignment

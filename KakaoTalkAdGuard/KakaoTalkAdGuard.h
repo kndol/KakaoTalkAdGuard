@@ -11,3 +11,6 @@ WCHAR const		REG_HIDETRAYICON[] = L"HideTrayIcon";
 WCHAR const		REG_UPDATEBANNARADREG[] = L"UpdateBannerAdRegistry";
 WCHAR const		REG_SHOWUPDATEBALLOON[] = L"ShowUpdateBalloon";
 WCHAR const     REG_OPENUPDATEPAGE[] = L"OpenUpdatePage";
+WCHAR const     REG_UPDATERATE[] = L"UpdateRate";
+UINT const      UPDATERATE_MIN = 10;
+UINT const      UPDATERATE_MAX = 10000;
